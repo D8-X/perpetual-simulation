@@ -1,0 +1,41 @@
+{
+  "fInitialMarginRate": 0.1,
+  "fMaintenanceMarginRate": 0.08,
+  "fTreasuryFeeRate": 0.0,
+  "fPnLPartRate": 0.0,
+  "fReferralRebateCC": 0.0004,
+  "fLiquidationPenaltyRate": 0.05,
+  "fMinimalSpread": 0.0002,
+  "fIncentiveSpread": 0.0008,
+  "fLotSizeBC": 0.001,
+  "fFundingRateClamp": 0.0005,
+  "fMarkPriceEMALambda": 0.7,
+  "fSigma2": 0.10,
+  "fSigma3": 0.05,
+  "fRho23": 0.85,
+  "eCollateralCurrency": "QUANTO",
+  "fStressReturnS2": [
+    -0.25,
+    0.25
+  ],
+  "fStressReturnS3": [
+    -0.15,
+    -0.05
+  ],
+  "fDFCoverNRate": 0.05,
+  "fDFLambda": [
+    0.999,
+    0.5
+  ],
+  "fAMMTargetDD": [
+    -3.2905267314918945,
+    -2.6120541412292777
+  ],
+  "fAMMMinSizeCC": 0.5,
+  "fMinimalTraderExposureEMA": 7,
+  "fMinimalAMMExposureEMA": 15,
+  "fMaximalTradeSizeBumpUp": 1.1,
+  "baseCurrency": "ETH",
+  "quoteCurrency": "USD",
+  "collateralCurrency": "BTC"
+}

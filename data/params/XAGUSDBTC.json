@@ -1,0 +1,39 @@
+{
+    "fInitialMarginRateAlpha": 0.06,
+    "fMarginRateBeta": 0.1,
+    "fInitialMarginRateCap": 0.05,
+    "fMaintenanceMarginRateAlpha": 0.04,
+    "fTreasuryFeeRate": 0.0005,
+    "fPnLPartRate": 0.0003,
+    "fReferralRebateCC": 0,
+    "fLiquidationPenaltyRate": 0.05,
+    "fMinimalSpread": 0.0005,
+    "fMinimalSpreadInStress": 0.0010,
+    "fLotSizeBC": 0.1,
+    "fFundingRateClamp": 0.0005,
+    "fMarkPriceEMALambda": 0.7,
+    "fSigma2": 0.15,
+    "fSigma3": 0.1,
+    "fRho23": 0.0,
+    "fStressReturnS2": [
+      -0.5,
+      0.5
+    ],
+    "fStressReturnS3": [
+      -0.5,
+      -0.5
+    ],
+    "fDFCoverNRate": 0.05,
+    "fDFLambda": [
+      0.999,
+      0.5
+    ],
+    "fAMMTargetDD": [
+      -2.9677379253417833,
+      -2.4323790585844467
+    ],
+    "fAMMMinSizeCC": 1,
+    "fMinimalTraderExposureEMA": 1,
+    "fMinimalAMMExposureEMA": 10,
+    "fMaximalTradeSizeBumpUp": 1.25
+}

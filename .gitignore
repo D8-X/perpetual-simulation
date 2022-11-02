@@ -1,0 +1,9 @@
+*/*.pyc
+*.pkl
+results/*
+*.aux
+*.bbl
+*.blg
+*.log
+*.out
+*.gz
