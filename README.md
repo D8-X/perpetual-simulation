@@ -1,33 +1,27 @@
-# PerpetualSimulation
-Simulation of perpetual swap DEX and traders
+# D8X Perpetual Simulations
 
-- the simulation is started with simulation.py  
-- writes an output to ./results/*.csv
-- use create_postgres.py to load the results into postgres database "amm_sim"
+## Overview
 
-# Integration Testing
-use integrationTests.py for integration testing test case
+- Simulations are started by running simulation.py  
+- Input is read from ./data/index and ./data/params
+  - ./data/index consists of historical market data for each perpetual index and collateral
+    - Time series is collected directly from Chainlink
+    - BSC is used as source network in most cases
+    - Some series, e.g. CHF, are taken from Polygon
+    - The choice of source is roughly based on which network provides minute-frequency data
+  - ./data/params contains the calibrated parameters for each perpetual contract
+    - Each set of parameters is stored in a json file
+- Output is written to ./results/*.csv
+  - One csv file per perpetual, containing a detailed view of each contract's state over time
+  - One csv file per simulation, containing a breakdown of the pool's revenue
 
-- Perpetual parameters and AMM fundings are in the script. 
-- the S2-Oracle price is represented by idx_px which is printed to the console when running the script
-- there are 3 traders and they trade according to ScheduleTraders.csv. -1 means they enter a short max position (given their cash), 1 the same long
-- Script output says what should be happening when mocking the oracle and trading according to ScheduleTraders.csv (e.g., liquidations at a certain point)
-
-# Rebalancing sequence
-- liquidate
-    - if ret(S2 & S3)>thresh:
-        rebalance_perpetual (price move)
-    - book trade (-> update K and params)
-    - update AMM pool size target
-    - distribute fees
-    - rebalance perpetual
-        - update_mark_price
-
-- trade
-    - if ret(S2 & S3)>thresh:
-        rebalance_perpetual (price move)
-    - book trade (-> update K and params)
-    - update AMM pool size target
-    - distribute fees
-    - rebalance_perpetual
-        - update_mark_price
+## How-to
+- Open simulation.py
+- The first function in the script, 'main', contains all the crucial simulation parameters:
+  - Random seed
+  - Simulation period
+  - Long/short probability
+  - Initial investment in the pool
+  - Average cash per trader
+- Other parameters are shared across simulated scenarios and defined later in main: they may be modified but not in bulk, they are static for a given set of simulations
+- 

@@ -125,21 +125,11 @@ class Perpetual:
         fxb2c = self.get_base_to_collateral_conversion(False)
         coupon = np.sign(trader.position_bc) * coupon_abs * fxb2c
         trader.cash_cc -= coupon
-        # self.amm_trader.cash_cc += coupon
         self.transfer_cash_to_margin(coupon)
 
     def get_price(self, pos: float):
-        # if not self.is_exposure_covered():
-        #     print("Price query but exposure not covered, rebalancing")
-        #     self.rebalance_perpetual()
-        assert(self.current_trader_exposure_EMA > 0)
         minSpread = self.min_spread
-        # df_ratio = self.my_amm.get_default_fund_gap_to_target_ratio()
-        # if df_ratio < 1:
-        #     minSpread = df_ratio * self.params['fMinimalSpread'] + (1 - df_ratio) * self.params['fMinimalSpreadInStress']
-        # else:
-        #     minSpread = self.params['fMinimalSpread']
-        incentiveSpread = self.incentive_rate  #/ self.current_trader_exposure_EMA
+        incentiveSpread = self.incentive_rate
         s2 = self.idx_s2[self.current_time]
         s3 = self.idx_s3[self.current_time]
         M1, M2, M3 = self.get_amm_pools()
@@ -151,15 +141,6 @@ class Perpetual:
                                                       self.params['fRho23'],
                                                       self.params['r'],
                                                       M1, M2, M3, minSpread, incentiveSpread, self.current_trader_exposure_EMA)
-        # px_reverse = pricing_benchmark.calculate_perp_priceV4(K2 + pos, -pos, L1 + pos * px, s2, s3,
-        #                                               self.params['fSigma2'],
-        #                                               self.params['fSigma3'],
-        #                                               self.params['fRho23'],
-        #                                               self.params['r'],
-        #                                               M1, M2, M3, minSpread, incentiveSpread, self.current_trader_exposure_EMA)
-        # if pos * (px_reverse - px) > 0:
-        #     print("DANGER: RISKLESS PROFIT AVAILABLE!")
-        #     assert(False)
 
         return px
 
@@ -241,19 +222,14 @@ class Perpetual:
     def scale_to_max_signed_trader_position(self, pos):
         max_signed_size = self.get_max_signed_trade_size_for_position(0, pos)
         # scale down
-        a = np.min((np.abs(pos), np.abs(max_signed_size)))
-        a = self.my_amm.shrink_to_lot(a if pos > 0 else -a, self.params['fLotSizeBC'])
+        abs_pos = np.min((np.abs(pos), np.abs(max_signed_size)))
+        pos = self.my_amm.shrink_to_lot(abs_pos if pos > 0 else -abs_pos, self.params['fLotSizeBC'])
         if np.abs(pos) < self.min_num_lots_per_pos * self.params['fLotSizeBC']:
-            a = 0
-        return a
+            pos = 0
+        return pos
 
     def get_pricing_staked_cash_for_perp(self):
-
-        ## 1) proportional to perp target / total target 
-        # staker_pricing_cash_cc = self.my_amm.staker_pricing_cash_ratio * self.my_amm.staker_cash_cc
-        # staker_cash_cc =  staker_pricing_cash_cc * self.amm_pool_target_size / self.my_amm.get_amm_pools_target()
-
-        ## 2) same for all perps
+        ## same for all perps in pool
         if len(self.my_amm.perpetual_list) > 0:
             staker_cash_cc = (self.my_amm.staker_pricing_cash_ratio * self.my_amm.staker_cash_cc) / len(self.my_amm.perpetual_list)
         else:
@@ -472,26 +448,12 @@ class Perpetual:
         # draw funds from pnl participants who don't otherwise contribute to
         # the default fund
         gap = gap - gap_fill_df
-        
-        # TODO: I comment this out because we will now consider staker cash toward the amm pool target
-        # if we want this here still, it should be total LP - P, not total LP as it is now
-        # gap_fill_staker = np.min((gap, 0.75*self.my_amm.staker_cash_cc)) 
-        gap_fill_staker = 0
+        gap_fill_staker = 0 # set to zero, pnl participants now participate in pricing
       
         self.my_amm.default_fund_cash_cc -= gap_fill_df
-        # assert(self.my_amm.staker_cash_cc == 0 or self.my_amm.staker_cash_cc >= gap_fill_staker)
-        if gap_fill_staker > 0:
-            print(f"WARNING: stakers paying to the amm! {gap_fill_staker:.4f} (stakers), {gap_fill_df:.4f} (df), {gap + gap_fill_df:.4f} (total gap)")
         self.my_amm.staker_cash_cc -= gap_fill_staker
         self.amm_pool_cash_cc += gap_fill_df + gap_fill_staker
 
-        # if stress_target_size > self.amm_pool_cash_cc:
-        #print("stress target amm pool size was not reached, premium will exceed threshold!")
-        # was: self.my_amm.is_emergency = True, however too conservative
-
-        # if not self.is_exposure_covered():
-        #     print("WARNING: amm exposure could not be covered by rebalancing")
-        #     self.my_amm.is_emergency = True
 
     def get_amm_pool_size_for_dd(self, dd):
         s2 = self.idx_s2[self.current_time]
@@ -715,15 +677,15 @@ class Perpetual:
                 new_position_bc = 0
 
         is_trying_to_exit = trader.position_bc != 0 and new_position_bc == 0
-        # if amount is less than one lot, no trade
+        # if amount is less than one lot, revert
         if np.abs(amount_bc) < self.params['fLotSizeBC'] and not is_trying_to_exit:
             print(f"Trade rejected: trade size below lot size {np.abs(amount_bc):.4f} < {self.params['fLotSizeBC']} ({trader.__class__.__name__})")
             return None
         
 
-        # if resulting position is smaller than minimal size, no trade
+        # if resulting position is smaller than minimal size, revert
         if new_position_bc != 0 and np.abs(new_position_bc) < self.min_num_lots_per_pos * self.params['fLotSizeBC'] and not is_trying_to_exit:
-            print(f"Trade rejected: resulting position below minimal size {np.abs(new_position_bc):.4f} < {self.min_num_lots_per_pos * self.params['fLotSizeBC']} ({trader.__class__.__name__})")
+            print(f"Trade rejected: resulting position below minimal size {np.abs(new_position_bc):.6f} < {self.min_num_lots_per_pos * self.params['fLotSizeBC']} ({trader.__class__.__name__})")
             return None
         # protocol_funds_before = self.my_amm.get_total_protocol_cash()
         self.rebalance_perpetual()
@@ -835,7 +797,7 @@ class Perpetual:
         Returns:
             [Tuple]: [staker fees and protocol fees]
         """
-        if trader.is_staker or (self.params['fTreasuryFeeRate'] + self.params['fPnLPartRate']) < 1e-4:
+        if trader.is_best_tier or (self.params['fTreasuryFeeRate'] + self.params['fPnLPartRate']) < 1e-5:
             return (0, 0)
         amount_bc = np.abs(amount_bc)
         fx_b2c = self.get_base_to_collateral_conversion(False)
@@ -895,7 +857,6 @@ class Perpetual:
         if(not is_close):
             self.__update_exposure_ema(amount_bc)
         # at this point the trade was successful: gas fees are paid from the amm margin account
-        # self.amm_trader.cash_cc -= GAS_FEE
         self.transfer_cash_to_margin(-GAS_FEE)
         return (delta_cash, is_close)
 
@@ -948,7 +909,7 @@ class Perpetual:
             trader ([Trader]): [trader instance]
         """
         # f: fee rate
-        if trader.is_staker:
+        if trader.is_best_tier:
             f = self.params['fLiquidationPenaltyRate']
         else:
             f = self.params['fLiquidationPenaltyRate'] +\
@@ -1028,7 +989,7 @@ class Perpetual:
         # cash_cc * s3 = pos * (price - sm) + f |pos| s2 + |pos| sm / leverage
         # pos * (price - sm) = pos*(price - s2) + pos*(s2 - sm)<= |pos| * (slip  + prem) * s2)
         # --> |pos| >= cash * (s3 / s2) /  (m_r * sm/s2 + f + slip + prem )
-        fee_rate = 0 if trader.is_staker else (self.params['fTreasuryFeeRate'] + self.params['fPnLPartRate'])
+        fee_rate = 0 if trader.is_best_tier else (self.params['fTreasuryFeeRate'] + self.params['fPnLPartRate'])
         s2 = self.get_index_price()
         sm = self.get_mark_price()
         s3 = self.get_collateral_price()
@@ -1037,46 +998,21 @@ class Perpetual:
         mr = self.params['fInitialMarginRate']
         return  (trader.cash_cc * s3 / s2) / (mr * sm / s2 + fee_rate + slip_tol + premium_rate)
 
-        target_premium_rate = norm.cdf(self.params['fAMMTargetDD'][1])
-        if slippage_rate is None:
-            slippage_rate = target_premium_rate
-        cash_bc = cash_cc / self.get_base_to_collateral_conversion(is_mark_price=False)
-        fee_rate = self.params['fTreasuryFeeRate'] + self.params['fPnLPartRate']
-        alpha = self.params['fInitialMarginRateAlpha']
-        beta = self.params['fMarginRateBeta']
-        # cash_bc = cash_cc / self.get_base_to_collateral_conversion(is_mark_price=False)
-        a = beta * (1 - target_premium_rate)
-        b = target_premium_rate + slippage_rate + fee_rate + alpha * (1 - target_premium_rate)
-        c = cash_bc
-        # a x^2 + b x - c = 0
-        if a != 0:
-            pos = (-b + np.sqrt(b * b + 4 * a * c)) / (2 * a)
-        else:
-            pos = c / b
-        pos = self.my_amm.shrink_to_lot(pos, self.params['fLotSizeBC'])
-        return np.sign(pos) * np.min((np.abs(pos), self.get_absolute_max_trade_size()))
-        # cash_cc == available cash (incl. funding)
-        
-
-
 
     def export(self):
-        params = self.params
         state = {
             'fCurrentFundingRate': self.get_funding_rate(),
-            # 'fUnitAccumulatedFunding': 0, # we don't have this
             'fOpenInterest': self.open_interest,
             'fAMMFundCashCC': self.amm_pool_cash_cc,
             'fkStar': self.get_Kstar(),
             'fkStarSide': np.sign(-self.get_Kstar()),
             'fTargetAMMFundSize': self.amm_pool_target_size,
-            # 'isBaselineAMMFundState': True, # we don't have this explicitly at least
             'fTargetDFSize': self.default_fund_target_size,
             'fCurrentAMMExposureEMA': list(self.current_AMM_exposure_EMA),
             'fCurrentTraderExposureEMA': self.current_trader_exposure_EMA,
         }
 
-        response = {'idx': self.my_idx, 'params': None, 'state': state}
+        response = {'idx': self.my_idx, 'state': state}
 
         return response
 

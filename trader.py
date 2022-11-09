@@ -16,7 +16,7 @@ class CollateralCurrency(Enum):
 
 class Trader(ABC):
     _counter = 0
-    def __init__(self, amm : 'AMM', perp_idx : int, cc: CollateralCurrency, cash_cc=np.nan, lot_bc=1e-10, is_staker=False) -> None:
+    def __init__(self, amm : 'AMM', perp_idx : int, cc: CollateralCurrency, cash_cc=np.nan, lot_bc=1e-10, is_best_tier=False) -> None:
         self.perp_idx = perp_idx
         self.amm = amm
         self.position_bc = 0 # position in base currency
@@ -28,7 +28,7 @@ class Trader(ABC):
         self.min_trade_pos = lot_bc
         self.slippage_tol = 0.05
         self.id = Trader._counter
-        self.is_staker = is_staker
+        self.is_best_tier = is_best_tier
         Trader._counter += 1
         self.amm.trader_dir.append(self)
 
