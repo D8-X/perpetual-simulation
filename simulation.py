@@ -2,7 +2,6 @@
 # -*- coding: utf-8 -*-
 #
 
-from fileinput import filename
 import glob
 import json
 import time
@@ -92,7 +91,7 @@ MAX_TRADER_REPLACEMENTS = 2000
 # filter out perps we are not simulating
 SYMBOLS = [b + 'USD' for b in INDEX if NUM_TRADERS[b + 'USD'] > 0]
 
-# static simulation hyperparameters
+# static simulation hyperparameters, see inside main
 SIM_PARAMS = dict()
 
 def main():
@@ -101,18 +100,19 @@ def main():
     # seed for cash samples, random agent trading order, random agent preferences
     seeds = [
         42, 
-        # 31415,
+        31415,
     ]
 
     # simulation period
     simulation_horizons = [
-        # (datetime(2022, 6, 1, 0, 0, tzinfo=timezone.utc), datetime(2022, 10, 30, 0, 0, tzinfo=timezone.utc)), 
-        (datetime(2022, 7, 1, 0, 0, tzinfo=timezone.utc), datetime(2022, 9, 1, 0, 0, tzinfo=timezone.utc)), 
+        (datetime(2022, 6, 15, 0, 0, tzinfo=timezone.utc), datetime(2022, 9, 15, 0, 0, tzinfo=timezone.utc)), 
+        (datetime(2022, 7, 1, 0, 0, tzinfo=timezone.utc), datetime(2022, 10, 1, 0, 0, tzinfo=timezone.utc)), 
     ]
 
     # given that a trader is about to open a position, with what probability will it be a long one?
     long_probs = [
-        # 0.50,
+        0.40,
+        0.50,
         0.60,
     ]
 
@@ -121,7 +121,7 @@ def main():
         # 150_000_000, 
         # 50_000_000,
         # 750_000,
-        3 * 350_000,
+        1_500_000,
     ]
 
     # exact cash amounts for each trader are randomized, this is an average
@@ -137,7 +137,7 @@ def main():
     filename = f"./results/simulation_{total_hash}.csv"
     results = pd.DataFrame(
         columns=["Start", "End", "Days", "Prob_Long",
-                 "Funds_Init", "Funds_Final", "DF_Excess", "Profit", "Liquid_Profit",
+                 "Funds_Init_CC", "Funds_Final_CC", "DF_Excess", "Profit_CC", "Profit_QC", "Liquid_Profit_QC",
                  "LP_Init", "LP_Final", "LP_APY",
                  "Volume", "Profit_per_Volume", "Annualized_Profit"]
     )
@@ -195,18 +195,19 @@ def main():
             "End": df.at[n-1, 'time'],
             "Days": float((pd.to_datetime(df.at[n-1,'time'], format='%y-%m-%d %H:%M') - pd.to_datetime(df.at[0,'time'], format='%y-%m-%d %H:%M')).days),
             "Prob_Long": SIM_PARAMS['prob_long'],
-            "Funds_Init": df.at[0, "df_cash"] + df.at[0, 'amm_cash'] + df.at[0, 'pool_margin'], 
-            "Funds_Final": df.at[n-1, "df_cash"] + df.at[n-1, 'amm_cash'] + df.at[n-1, 'pool_margin'], 
+            "Funds_Init_CC": df.at[0, "df_cash"] + df.at[0, 'amm_cash'] + df.at[0, 'pool_margin'], 
+            "Funds_Final_CC": df.at[n-1, "df_cash"] + df.at[n-1, 'amm_cash'] + df.at[n-1, 'pool_margin'], 
             "DF_Excess": -df.at[n-1, "df_cash_to_target"], 
             "LP_Init": df.at[0, "staker_cash"], 
             "LP_Final": df.at[n-1, "staker_cash"], 
             "Volume": df.at[n-1, "total_volume_qc"],
         }
-        res["Profit"] = res["Funds_Final"] - res["Funds_Init"]
-        res["Liquid_Profit"] = np.min((res["Profit"], np.max((0, res["DF_Excess"]))))
-        res["Annualized_Profit"] = res["Profit"] * 365 / res["Days"]
+        res["Profit_CC"] = res["Funds_Final_CC"] - res["Funds_Init_CC"]
+        res["Profit_QC"] = res["Funds_Final_CC"] * df.at[n-1, "idx_s3"] - res["Funds_Init_CC"] * df.at[0, "idx_s3"]
+        res["Liquid_Profit_QC"] = np.min((res["Profit_QC"], np.max((0, res["DF_Excess"] * df.at[n-1, "idx_s3"]))))
+        res["Annualized_Profit"] = res["Profit_QC"] * 365 / res["Days"]
         res["LP_APY"] = (res["LP_Final"] / res["LP_Init"] - 1) * 365 / res["Days"]
-        res["Profit_per_Volume"] = res["Profit"] / res["Volume"]
+        res["Profit_per_Volume"] = res["Profit_QC"] / res["Volume"]
        
         results.loc[results.shape[0]] = res
         results.to_csv(filename)
@@ -425,7 +426,7 @@ def simulate(sim_params):
             # this perpetual's status
             do_print = (
                 t % 10_000 == 0 or
-                amm.get_default_fund_gap_to_target_ratio() < 0.05 or
+                amm.get_default_fund_gap_to_target_ratio() < 0.02 or
                 np.abs(perp.get_mark_price() / perp.get_index_price() - 1) > 0.02 or
                 max_long < 2 * min_pos_size or
                 max_short > - 2 * min_pos_size
@@ -503,7 +504,7 @@ def simulate(sim_params):
         num_logging_measurements += 1
 
         # overall pool status
-        if t % 10_000 == 0 or t == time_df.shape[0] - 1 or amm.get_default_fund_gap_to_target_ratio() < 0.05:
+        if t % 10_000 == 0 or t == time_df.shape[0] - 1 or amm.get_default_fund_gap_to_target_ratio() < 0.02:
             S3 = perp.get_collateral_price()
             delta_t = (datetime.now() - run_t0).total_seconds() / 60
             arb_pnl_cc = sum([sim_params[symbol]['arb_pnl'] for symbol in SYMBOLS]) / idx_s3[t]
