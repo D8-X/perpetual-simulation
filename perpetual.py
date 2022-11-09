@@ -442,8 +442,11 @@ class Perpetual:
         # draw funds in relation to available size from default fund
         # If default fund is funded at rate r we withdraw at most min(1, r%) from it
         gap = stress_target_size - self.amm_pool_cash_cc
+        fill_rate = np.min(
+            (0.5, self.my_amm.get_default_fund_gap_to_target_ratio())
+        )
         gap_fill_df = np.min(
-            (gap, 0.75 * self.my_amm.default_fund_cash_cc)
+            (gap, fill_rate * self.my_amm.default_fund_cash_cc)
         )
         # draw funds from pnl participants who don't otherwise contribute to
         # the default fund
