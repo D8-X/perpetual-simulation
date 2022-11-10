@@ -4,6 +4,7 @@
 
 import glob
 import json
+import pprint
 import time
 from scipy import stats
 from arb_trader import ArbTrader
@@ -46,7 +47,7 @@ NUM_TRADERS = {
 # new traders join randomly - up to how many each time? 
 # e.g. if we start with N traders and multiplier is M, then there will be in average (M+1) * N traders by the end of the simulation
 # to keep same growth rate but reduced target (e.g. to go from 4 to 2 months and keep all other params the same, use divider = 2)
-GROWTH_DIVIDER = 4
+GROWTH_DIVIDER = 2
 GROWTH_MULTIPLIER = {
     'BTCUSD': 20 // GROWTH_DIVIDER, 
     'XAUUSD': 20 // GROWTH_DIVIDER, 
@@ -100,23 +101,23 @@ def main():
     # seed for cash samples, random agent trading order, random agent preferences
     seeds = [
         42, 
-        31415,
+        #31415,
     ]
 
     # simulation period
     simulation_horizons = [
-        (datetime(2022, 6, 15, 0, 0, tzinfo=timezone.utc), datetime(2022, 9, 15, 0, 0, tzinfo=timezone.utc)), 
-        (datetime(2022, 7, 1, 0, 0, tzinfo=timezone.utc), datetime(2022, 10, 1, 0, 0, tzinfo=timezone.utc)), 
+        (datetime(2022, 5, 15, 0, 0, tzinfo=timezone.utc), datetime(2022, 8, 15, 0, 0, tzinfo=timezone.utc)), 
+        #(datetime(2022, 7, 1, 0, 0, tzinfo=timezone.utc), datetime(2022, 10, 1, 0, 0, tzinfo=timezone.utc)), 
     ]
 
     # given that a trader is about to open a position, with what probability will it be a long one?
     long_probs = [
-        0.40,
+        #0.40,
         0.50,
-        0.60,
+       # 0.60,
     ]
 
-    # how much liquidity does the protocol have at launch?
+    # how much liquidity does the protocol have at launch? in dollars
     initial_investments = [
         # 150_000_000, 
         # 50_000_000,
@@ -135,12 +136,7 @@ def main():
     total_hash = hash(run_configs)
 
     filename = f"./results/simulation_{total_hash}.csv"
-    results = pd.DataFrame(
-        columns=["Start", "End", "Days", "Prob_Long",
-                 "Funds_Init_CC", "Funds_Final_CC", "DF_Excess", "Profit_CC", "Profit_QC", "Liquid_Profit_QC",
-                 "LP_Init", "LP_Final", "LP_APY",
-                 "Volume", "Profit_per_Volume", "Annualized_Profit"]
-    )
+    results = pd.DataFrame()
 
     for run_config in run_configs:
         SIM_PARAMS['run_hash'] = hash(run_config)
@@ -187,29 +183,13 @@ def main():
         # 'global' variable to hold simulation state as it runs
         sim_state = dict()
         df = simulate(sim_state)
-        n = df.shape[0]
 
         # revenue summary
-        res = {
-            "Start": df.at[0,'time'], 
-            "End": df.at[n-1, 'time'],
-            "Days": float((pd.to_datetime(df.at[n-1,'time'], format='%y-%m-%d %H:%M') - pd.to_datetime(df.at[0,'time'], format='%y-%m-%d %H:%M')).days),
-            "Prob_Long": SIM_PARAMS['prob_long'],
-            "Funds_Init_CC": df.at[0, "df_cash"] + df.at[0, 'amm_cash'] + df.at[0, 'pool_margin'], 
-            "Funds_Final_CC": df.at[n-1, "df_cash"] + df.at[n-1, 'amm_cash'] + df.at[n-1, 'pool_margin'], 
-            "DF_Excess": -df.at[n-1, "df_cash_to_target"], 
-            "LP_Init": df.at[0, "staker_cash"], 
-            "LP_Final": df.at[n-1, "staker_cash"], 
-            "Volume": df.at[n-1, "total_volume_qc"],
-        }
-        res["Profit_CC"] = res["Funds_Final_CC"] - res["Funds_Init_CC"]
-        res["Profit_QC"] = res["Funds_Final_CC"] * df.at[n-1, "idx_s3"] - res["Funds_Init_CC"] * df.at[0, "idx_s3"]
-        res["Liquid_Profit_QC"] = np.min((res["Profit_QC"], np.max((0, res["DF_Excess"] * df.at[n-1, "idx_s3"]))))
-        res["Annualized_Profit"] = res["Profit_QC"] * 365 / res["Days"]
-        res["LP_APY"] = (res["LP_Final"] / res["LP_Init"] - 1) * 365 / res["Days"]
-        res["Profit_per_Volume"] = res["Profit_QC"] / res["Volume"]
-       
-        results.loc[results.shape[0]] = res
+        res = report_stats(df)
+        if results.shape[0] > 0:
+            results.loc[results.shape[0]] = res
+        else:
+            results = pd.DataFrame(res, index=[0])
         results.to_csv(filename)
         print(res)
         
@@ -218,6 +198,32 @@ def main():
     results.to_csv(filename)
     print(results)
     print(f"Finished! And it only took {delta_t / 60:.1f} hours...")
+
+
+def report_stats(amm_state):
+    n = amm_state.shape[0]
+    res = {
+        "Start": amm_state.at[0,'time'], 
+        "End": amm_state.at[n-1, 'time'],
+        "Days": float((pd.to_datetime(amm_state.at[n-1,'time'], format='%y-%m-%d %H:%M') - pd.to_datetime(amm_state.at[0,'time'], format='%y-%m-%d %H:%M')).days),
+        "Prob_Long": SIM_PARAMS['prob_long'],
+        "Funds_Init_CC": amm_state.at[0, "df_cash"] + amm_state.at[0, 'amm_cash'] + amm_state.at[0, 'pool_margin'], 
+        "Funds_Final_CC": amm_state.at[n-1, "df_cash"] + amm_state.at[n-1, 'amm_cash'] + amm_state.at[n-1, 'pool_margin'], 
+        "DF_Excess": -amm_state.at[n-1, "df_cash_to_target"], 
+        "LP_Init_QC": amm_state.at[0, "staker_cash"] * amm_state.at[0, "idx_s3"], 
+        "LP_Final_QC": amm_state.at[n-1, "staker_cash"] * amm_state.at[n-1, "idx_s3"], 
+        "Volume_QC": amm_state.at[n-1, "total_volume_qc"],
+    }
+    res["Funds_Init_QC"] = res["Funds_Init_CC"] * amm_state.at[0, "idx_s3"]
+    res["Funds_Final_QC"] = res["Funds_Final_CC"] * amm_state.at[n-1, "idx_s3"]
+    res["Profit_CC"] = res["Funds_Final_CC"] - res["Funds_Init_CC"]
+    res["Profit_QC"] = res["Funds_Final_QC"] - res["Funds_Init_QC"]
+    res["Liquid_Profit_QC"] = np.min((res["Profit_QC"], np.max((0, res["DF_Excess"] * amm_state.at[n-1, "idx_s3"]))))
+    res["Annualized_Profit"] = res["Profit_QC"] * 365 / res["Days"]
+    res["LP_APY"] = (res["LP_Final_QC"] / res["LP_Init_QC"] - 1) * 365 / res["Days"]
+    res["Profit_per_Volume"] = res["Profit_QC"] / res["Volume_QC"]
+
+    return res
 
 
 def simulate(sim_params):
@@ -425,11 +431,11 @@ def simulate(sim_params):
             
             # this perpetual's status
             do_print = (
-                t % 10_000 == 0 or
-                amm.get_default_fund_gap_to_target_ratio() < 0.02 or
-                np.abs(perp.get_mark_price() / perp.get_index_price() - 1) > 0.02 or
-                max_long < 2 * min_pos_size or
-                max_short > - 2 * min_pos_size
+                t % 10_000 == 0 # or
+                # amm.get_default_fund_gap_to_target_ratio() < 0.02 or
+                # np.abs(perp.get_mark_price() / perp.get_index_price() - 1) > 0.02 or
+                # max_long < 2 * min_pos_size or
+                # max_short > - 2 * min_pos_size
             )
                 
             if do_print:
@@ -504,7 +510,7 @@ def simulate(sim_params):
         num_logging_measurements += 1
 
         # overall pool status
-        if t % 10_000 == 0 or t == time_df.shape[0] - 1 or amm.get_default_fund_gap_to_target_ratio() < 0.02:
+        if t % 10_000 == 0 or t == time_df.shape[0] - 1: # or amm.get_default_fund_gap_to_target_ratio() < 0.02:
             S3 = perp.get_collateral_price()
             delta_t = (datetime.now() - run_t0).total_seconds() / 60
             arb_pnl_cc = sum([sim_params[symbol]['arb_pnl'] for symbol in SYMBOLS]) / idx_s3[t]
@@ -525,13 +531,16 @@ def simulate(sim_params):
                 # + f"fees = {amm.fees_earned:.3f} "\
                 #+ f"(${arb_locked_usd / np.max((arb_active, 1)):.0f} locked per bot, ${arb_locked_usd:.0f} total)"
             )
-            # print("".join(("-" for _ in range(100))))
+            
             print(msg)
             print(f"PnL by perp (in {COLL}):\t" + "\t".join([f"{name}: {amm.earnings[i]: .3f}" for i, name in enumerate(SYMBOLS)]))
-            print(amm_state.iloc[t,:])
+            # stats
             if t > 0:
+                pprint.pprint(report_stats(amm_state.loc[:t]))
                 time_left = (time_df.shape[0]/t -1)*delta_t
                 print(f"{delta_t:.1f} minutes elapsed, {100.0 * t / time_df.shape[0]:.1f}% complete, approx. {1.1*time_left:.1f} minutes left.")
+            else:
+                print(amm_state.iloc[t,:])
             print("".join(("-" for _ in range(100))) + "\n")
 
         # 'animate' AMM depth
