@@ -4,12 +4,10 @@
 # AMM class
 # 
 
-from anyio import current_time
 import numpy as np
 from amm_trader import AMMTrader
 from perpetual import Perpetual
 from trader import CollateralCurrency, Trader
-import json
 
 class AMM:
 

@@ -47,7 +47,7 @@ NUM_TRADERS = {
 # new traders join randomly - up to how many each time? 
 # e.g. if we start with N traders and multiplier is M, then there will be in average (M+1) * N traders by the end of the simulation
 # to keep same growth rate but reduced target (e.g. to go from 4 to 2 months and keep all other params the same, use divider = 2)
-GROWTH_DIVIDER = 2
+GROWTH_DIVIDER = 4
 GROWTH_MULTIPLIER = {
     'BTCUSD': 20 // GROWTH_DIVIDER, 
     'XAUUSD': 20 // GROWTH_DIVIDER, 
@@ -106,7 +106,7 @@ def main():
 
     # simulation period
     simulation_horizons = [
-        (datetime(2022, 5, 15, 0, 0, tzinfo=timezone.utc), datetime(2022, 8, 15, 0, 0, tzinfo=timezone.utc)), 
+        (datetime(2022, 5, 15, 0, 0, tzinfo=timezone.utc), datetime(2022, 8, 30, 0, 0, tzinfo=timezone.utc)), 
         #(datetime(2022, 7, 1, 0, 0, tzinfo=timezone.utc), datetime(2022, 10, 1, 0, 0, tzinfo=timezone.utc)), 
     ]
 
@@ -210,18 +210,25 @@ def report_stats(amm_state):
         "Funds_Init_CC": amm_state.at[0, "df_cash"] + amm_state.at[0, 'amm_cash'] + amm_state.at[0, 'pool_margin'], 
         "Funds_Final_CC": amm_state.at[n-1, "df_cash"] + amm_state.at[n-1, 'amm_cash'] + amm_state.at[n-1, 'pool_margin'], 
         "DF_Excess": -amm_state.at[n-1, "df_cash_to_target"], 
+        "LP_Init_CC": amm_state.at[0, "staker_cash"], 
+        "LP_Final_CC": amm_state.at[n-1, "staker_cash"],
         "LP_Init_QC": amm_state.at[0, "staker_cash"] * amm_state.at[0, "idx_s3"], 
         "LP_Final_QC": amm_state.at[n-1, "staker_cash"] * amm_state.at[n-1, "idx_s3"], 
         "Volume_QC": amm_state.at[n-1, "total_volume_qc"],
+        "Volume_CC": amm_state.at[n-1, "total_volume_cc"],
     }
     res["Funds_Init_QC"] = res["Funds_Init_CC"] * amm_state.at[0, "idx_s3"]
     res["Funds_Final_QC"] = res["Funds_Final_CC"] * amm_state.at[n-1, "idx_s3"]
     res["Profit_CC"] = res["Funds_Final_CC"] - res["Funds_Init_CC"]
     res["Profit_QC"] = res["Funds_Final_QC"] - res["Funds_Init_QC"]
     res["Liquid_Profit_QC"] = np.min((res["Profit_QC"], np.max((0, res["DF_Excess"] * amm_state.at[n-1, "idx_s3"]))))
-    res["Annualized_Profit"] = res["Profit_QC"] * 365 / res["Days"]
-    res["LP_APY"] = (res["LP_Final_QC"] / res["LP_Init_QC"] - 1) * 365 / res["Days"]
-    res["Profit_per_Volume"] = res["Profit_QC"] / res["Volume_QC"]
+    res["Liquid_Profit_CC"] = np.min((res["Profit_CC"], np.max((0, res["DF_Excess"]))))
+    res["Annualized_Profit_QC"] = res["Profit_QC"] * 365 / res["Days"]
+    res["Annualized_Profit_CC"] = res["Profit_CC"] * 365 / res["Days"]
+    res["LP_QC_APY"] = (res["LP_Final_QC"] / res["LP_Init_QC"] - 1) * 365 / res["Days"]
+    res["LP_CC_APY"] = (res["LP_Final_CC"] / res["LP_Init_CC"] - 1) * 365 / res["Days"]
+    res["ProfitQC_per_VolumeQC"] = res["Profit_QC"] / res["Volume_QC"]
+    res["ProfitCC_per_VolumeCC"] = res["Profit_CC"] / res["Volume_CC"]
 
     return res
 
@@ -271,10 +278,10 @@ def simulate(sim_params):
                 'time', 'idx_s3', 
                 'df_cash', 'amm_cash', 'pool_margin', 'pricing_staked_cash', 'cash_staked', 'staker_cash',
                 'protocol_earnings_vault', 'df_cash_to_target', 'liquidator_earnings_vault', 
-                'share_token_supply', 'total_volume_qc',])
+                'share_token_supply', 'total_volume_qc', 'total_volume_cc' ])
             
-    amm_state.loc[:,'time'] = time_df.to_numpy()
-    amm_state.loc[:,'idx_s3'] = idx_s3
+    amm_state['time'] = time_df.to_numpy()
+    amm_state['idx_s3'] = idx_s3
     protocol_cash_cc = SIM_PARAMS['initial_protocol_investment'] / idx_s3[0]
 
     for symbol in SYMBOLS:
@@ -331,7 +338,7 @@ def simulate(sim_params):
                     'perp_amm_target', 'perp_amm_target_baseline', 'perp_amm_target_stress', 
                     'current_trader_exposure_EMA',
                     'num_noise_traders', 'num_momentum_traders','num_arb_traders','num_bankrupt_traders', 
-                    'perp_volume_qc', 'perp_K2', 'perp_L1',
+                    'perp_volume_qc', 'perp_volume_bc', 'perp_volume_cc', 'perp_K2', 'perp_L1',
                     'funding_rate', '10k_long_price', '10k_short_price', '100klots_long_price', '100klots_short_price',
                     # 'current_AMM_exposure_EMA_0','current_AMM_exposure_EMA_1','current_trader_exposure_EMA',
                     # 'protocol_btc_volume', 'locked_in_qc', 'open_interest',
@@ -340,8 +347,8 @@ def simulate(sim_params):
                     'max_long_trade', 'max_short_trade', 'num_trades', 'max_long_price', 'max_short_price', 
                     'avg_long_price', 'avg_short_price', 'min_long_price', 'min_short_price',
                     ])
-        state_dict[perp_idx].loc[:,'idx_px'] = idx_s2[symbol]
-        state_dict[perp_idx].loc[:,'cex_px'] = cex_ts[symbol]
+        state_dict[perp_idx]['idx_px'] = idx_s2[symbol]
+        state_dict[perp_idx]['cex_px'] = cex_ts[symbol]
         # create traders
         traders.extend(
             initialize_traders(
@@ -393,7 +400,7 @@ def simulate(sim_params):
 
 
     # loop over time
-    print(f"\nBeginning simulation...\n")
+    print(f"\nBeginning simulation @ {datetime.now().time()}\n")
 
     trade_count = 0
     liquidation_count = 0
@@ -475,18 +482,20 @@ def simulate(sim_params):
                     GROWTH_MULTIPLIER[symbol],
                     NUM_TRADERS[symbol] / (0.75 * time_df.shape[0])
                 )
-                new_noise_traders += int(traders_joining * 0.90)
-                new_momentum_traders += (traders_joining - new_noise_traders)
-            
-                # for _ in range(GROWTH_MULTIPLIER[symbol]):
-                #     trader_joins = np.random.uniform() < NUM_TRADERS[symbol] / (0.75 * time_df.shape[0])
-                #     if not trader_joins: continue
+                # new_noise_traders += int(np.ceil(traders_joining * 0.90))
+                # new_momentum_traders += (traders_joining - new_noise_traders)
+                if traders_joining < 1:
+                    continue
+                for _ in range(traders_joining):
+                    # trader_joins = np.random.uniform() < NUM_TRADERS[symbol] / (0.75 * time_df.shape[0])
+                    # if not trader_joins: continue
                     
-                #     noise_trader = 1 if np.random.uniform() < 0.8 else 0
-                #     new_noise_traders += noise_trader
-                #     new_momentum_traders = 1 - noise_trader
+                    noise_trader = 1 if np.random.uniform() < 0.9 else 0
+                    new_noise_traders += noise_trader
+                    new_momentum_traders += 1 - noise_trader
 
             if new_noise_traders + new_momentum_traders > 0:
+                # print(f"New traders join: {new_noise_traders} noise and {new_momentum_traders} momentum")
                 total_noise_traders[symbol] += new_noise_traders
                 total_momentum_traders[symbol] += new_momentum_traders
                 total_num_traders[symbol] += new_noise_traders + new_momentum_traders  
@@ -533,9 +542,16 @@ def simulate(sim_params):
             )
             
             print(msg)
-            print(f"PnL by perp (in {COLL}):\t" + "\t".join([f"{name}: {amm.earnings[i]: .3f}" for i, name in enumerate(SYMBOLS)]))
+            
             # stats
             if t > 0:
+                pnl_abs_cc = [f"{name}: {amm.earnings[i]: .3f}" for i, name in enumerate(SYMBOLS)]
+                print(f"PnL by perp (in {COLL}):\t" + "\t".join(pnl_abs_cc))
+                pnl_rel = [
+                    f"{name}: {100 * amm.earnings[i] / state_dict[perps[i]].at[t, 'perp_volume_cc']: .3f}" 
+                    for i, name in enumerate(SYMBOLS)
+                ]
+                print(f"PnL by perp (cc on cc, in %):\t" + "\t".join(pnl_rel))
                 pprint.pprint(report_stats(amm_state.loc[:t]))
                 time_left = (time_df.shape[0]/t -1)*delta_t
                 print(f"{delta_t:.1f} minutes elapsed, {100.0 * t / time_df.shape[0]:.1f}% complete, approx. {1.1*time_left:.1f} minutes left.")
@@ -606,6 +622,12 @@ def simulate(sim_params):
     end_dt = datetime.fromtimestamp(SIM_PARAMS['to_date'])
     delta_t = (datetime.now() - run_t0).total_seconds() / 60
     print(f"Simulation completed in {delta_t:.1f} minutes.\n")
+    # some aggregates for pool
+    amm_state['total_volume_qc'] = 0
+    amm_state['total_volume_cc'] = 0
+    for perp_idx in perps:
+        amm_state['total_volume_cc'] += state_dict[perp_idx]['perp_volume_cc']
+        amm_state['total_volume_qc'] += state_dict[perp_idx]['perp_volume_qc']
     for i, symbol in enumerate(SYMBOLS):
         perp_idx = perps[i]
         date_appendix = f"_{end_dt.year}{end_dt.month}{end_dt.day}-{SIM_PARAMS['run_hash']}"
@@ -637,7 +659,7 @@ def load_perp_params(symbol, collateral):
     return perp_params
 
 
-def init_index_data(from_date, to_date, reload=False, symbol='BTCUSD', collateral='BTC'):
+def init_index_data(from_date, to_date, reload=False, symbol : str|list='BTCUSD', collateral='BTC'):
     if not type(symbol) is list:
         symbol = [symbol]
     df_idx_s2 = dict()
@@ -723,7 +745,7 @@ def format_time(df, from_date, to_date):
     return df[['t', 'timestamp', 'price']]
 
 
-def load_price_data(symbol: str, source: str=None, network: str=None, from_date=None, to_date=None):
+def load_price_data(symbol: str, source: str|None=None, network: str|None=None, from_date=None, to_date=None):
     """Load index time series data into a pandas data frame
 
     Args:
@@ -986,7 +1008,8 @@ def record_amm_state(t, state, amm, traders, stakers):
     state.at[t, 'df_target'] = amm.get_default_fund_gap_to_target() + amm.default_fund_cash_cc
     state.at[t, 'amm_target'] = amm.get_amm_pools_gap_to_target() + state.at[t, 'amm_cash']
     state.at[t, 'df_cash_to_target'] = amm.get_default_fund_gap_to_target()
-    state.at[t, 'total_volume_qc'] = sum((p.total_volume * p.get_index_price() for p in amm.perpetual_list))
+    # state.at[t, 'total_volume_qc'] = sum((p.total_volume * p.get_index_price() for p in amm.perpetual_list))
+    # state.at[t, 'total_volume_cc'] = sum((p.total_volume * p.get_base_to_collateral_conversion(False) for p in amm.perpetual_list))
 
 
 
@@ -1013,7 +1036,9 @@ def record_perp_state(time_idx, state, perp_idx, traders, sim, amm):
     state.at[time_idx,'num_bankrupt_traders'] = sim['num_bankrupt_traders']
 
     # aggregates 
-    state.at[time_idx, 'perp_volume_qc'] = perp.total_volume * perp.get_index_price()
+    state.at[time_idx, 'perp_volume_bc'] = perp.total_volume_bc
+    state.at[time_idx, 'perp_volume_qc'] = perp.total_volume_qc
+    state.at[time_idx, 'perp_volume_cc'] = perp.total_volume_cc
     # state.at[time_idx, 'open_interest'] = perp.open_interest
     
     state.at[time_idx,'current_trader_exposure_EMA'] = perp.current_trader_exposure_EMA

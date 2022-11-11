@@ -93,7 +93,9 @@ class Perpetual:
         self.my_idx = my_idx
         self.amm_trader = AMMTrader(amm, my_idx, cc, initial_margin_cash, lot_bc=params['fLotSizeBC'])
         self.current_time = amm.current_time
-        self.total_volume = 0  # BTC notional traded
+        self.total_volume_bc = 0  # notional traded in base currency
+        self.total_volume_qc = 0 # notional traded in quote currency
+        self.total_volume_cc = 0 # notional traded in quote currency
         self.open_interest = 0
         self.amm_pool_target_size = params['fAMMMinSizeCC']
         self.default_fund_target_size = params['fAMMMinSizeCC']
@@ -831,7 +833,9 @@ class Perpetual:
         if is_close_only:
             max_amount = np.abs(trader.position_bc)
             assert(np.abs(amount_bc) <= max_amount)
-        self.total_volume += np.abs(amount_bc)
+        self.total_volume_bc += np.abs(amount_bc)
+        self.total_volume_qc += np.abs(amount_bc) * self.get_index_price()
+        self.total_volume_cc += np.abs(amount_bc) * self.get_base_to_collateral_conversion(False)
         # is_close = trader.position_bc != 0 and np.sign(trader.position_bc) != np.sign(amount_bc)
         new_pos_bc = trader.position_bc + amount_bc
         is_close = (

@@ -32,9 +32,9 @@
     -2.9478425521849063
   ],
   "fAMMMinSizeCC": 80000,
-  "fMinimalTraderExposureEMA": 5,
-  "fMinimalAMMExposureEMA": 30,
-  "fMaximalTradeSizeBumpUp": 4,
+  "fMinimalTraderExposureEMA": 10,
+  "fMinimalAMMExposureEMA": 100,
+  "fMaximalTradeSizeBumpUp": 1.5,
   "baseCurrency": "ETH",
   "quoteCurrency": "USD",
   "collateralCurrency": "MATIC"
