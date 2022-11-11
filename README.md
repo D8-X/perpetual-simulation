@@ -23,18 +23,18 @@
 
 ## How-to
 - Open simulation.py
-- The first function in the script, 'main', contains all the crucial simulation parameters:
+- The 'main' function contains the parameters defining the grid of scenarios to be simulated:
   - Random seed
   - Simulation period
   - Long/short probability
   - Initial investment in the pool
   - Average cash per trader
-- Hyperparamters, shared across simulated scenarios, are defined later in main: 
-  - Trading frequency (based on observed activity in other exchanges)
-  - Funding for arbitrage (for testing purposes)
+- Executing this script triggers a parallelized run of all the possible scenario configurations using these parameters.
+- Global parameters are defined at the beginning of the script. These are shared across simulated scenarios, and include: 
+  - Average trading frequency (based on observed activity in other exchanges)
   - External liquidity provision (number of stakers, amount per staker, holding periods)
-  - Automated revenue withdrawal (for testing purposes)
-- Having defined all parameters, execute simulation.py.
+  - Automated revenue withdrawal (for testing purposes, disabled)
+  - Funding for arbitrage (for testing purposes, disabled)
 - Partial results are periodically shown on screen.
 
 ## Components
