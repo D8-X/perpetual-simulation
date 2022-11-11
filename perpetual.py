@@ -233,11 +233,9 @@ class Perpetual:
     def get_pricing_staked_cash_for_perp(self):
         ## same for all perps in pool
         if len(self.my_amm.perpetual_list) > 0:
-            staker_cash_cc = (self.my_amm.staker_pricing_cash_ratio * self.my_amm.staker_cash_cc) / len(self.my_amm.perpetual_list)
+            return (self.my_amm.staker_pricing_cash_ratio * self.my_amm.staker_cash_cc) / len(self.my_amm.perpetual_list)
         else:
             return 0
-
-        return staker_cash_cc
 
     def get_amm_pools(self):
         # get cash from LP

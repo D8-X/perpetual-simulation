@@ -15,10 +15,10 @@
 - Output is written to ./results
   - One csv file per simulation, following the pattern
   `simulation_{Hash Code}.csv`
-    containing a breakdown of the pool's revenue. This hash code identifies the simulation environment, not the parameters of each perpetual.
+    containing a breakdown of the pool's revenue. This hash code identifies the entire set of simulation environments, not the parameters of each perpetual.
   - One csv file per perpetual, of the form 
   `results{Total Traders}{Total Arbs}_{Index}{Quote}{Collateral}-{End Date}-{Hash Code}.csv`
-    containing a detailed view of each contract's state over time. The hash code is the same as above.
+    containing a detailed view of each contract's state over time. The hash code identifies the individual simulation.
  
 
 ## How-to
