@@ -47,7 +47,7 @@ One per collateral currency, and so one per simulation. Corresponds to Liquidity
 One per index, quote and collateral currency triple. Implemented in perpetual.py.
 ### Traders
 
-Simulations consist of 3 different traders/agents:
+Simulations consist of 3 different types of traders/agents:
 #### Noise Traders
   - When they don't have an open position, they will stochastically try to open one.
   - When they have an open position, they will close using a Stop Loss/Take Profit logic. 
