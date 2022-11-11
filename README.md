@@ -34,6 +34,8 @@
   - Funding for arbitrage (for testing purposes)
   - External liquidity provision (number of stakers, amount per staker, holding periods)
   - Automated revenue withdrawal (for testing purposes)
+- Having defined all parameters, execute simulation.py.
+- Partial results are periodically shown on screen.
 
 ## Components
 
