@@ -55,7 +55,7 @@ Simulations consist of 3 different types of traders/agents:
   - The cash available for each trader is randomized and based on the distribution observed in other exchanges.
 #### Momentum Traders
   - They look for price movements that deviate from their moving average.
-  - IWhen the deviation is large enough:
+  - When the deviation is large enough:
     - If they don't have an open position, they attempt to trade in the direction of the price movement.
     - If they have an open position, they will keep it open unless the direction goes in the opposite direction
   - When the deviation is not significant:
