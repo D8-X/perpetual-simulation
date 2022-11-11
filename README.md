@@ -67,11 +67,11 @@ Simulations consist of 3 different traders/agents:
   - They look for arbitrage opportunities between the exchange and one other centralized exchange.
   - Usually kept out of the simulations to make the calibrations more conservative: e.g. the mark premium rate in the presence of arbitrage should be at most as high as without arbitrage.
 
-### Stakers
-Correspond to external liquidity providers. Only "noise" stakers are implemented:
+### Liquidity Providers
+Correspond to external liquidity providers. Only "noise" LPs are implemented:
   - They deposit cash stochastically within a given period.
   - They withdraw their deposit after a given hoolding period has passed.
-  - The cash available to each staker is randomized.
+  - The cash available to each LP is randomized.
 
 ### Data-getter
 Used to query index data directly from Chainlink.
