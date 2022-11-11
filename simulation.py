@@ -239,12 +239,15 @@ def main():
 
 def report_stats(amm_state, sim):
     n = amm_state.shape[0]
+    days = float((pd.to_datetime(amm_state.at[n-1,'time'], format='%y-%m-%d %H:%M') 
+                  - pd.to_datetime(amm_state.at[0,'time'], format='%y-%m-%d %H:%M')).days)
+    days = np.max((1, days))
     res = {
         "Run_ID": sim['group_hash'],
         "Sim_ID": sim['sim_hash'],
         "Start": amm_state.at[0,'time'], 
         "End": amm_state.at[n-1, 'time'],
-        "Days": float((pd.to_datetime(amm_state.at[n-1,'time'], format='%y-%m-%d %H:%M') - pd.to_datetime(amm_state.at[0,'time'], format='%y-%m-%d %H:%M')).days),
+        "Days": days,
         "Prob_Long": sim['prob_long'],
         "Funds_Init_CC": amm_state.at[0, "df_cash"] + amm_state.at[0, 'amm_cash'] + amm_state.at[0, 'pool_margin'], 
         "Funds_Final_CC": amm_state.at[n-1, "df_cash"] + amm_state.at[n-1, 'amm_cash'] + amm_state.at[n-1, 'pool_margin'], 
