@@ -1,25 +1,25 @@
 {
   "fInitialMarginRate": 0.1,
-  "fMaintenanceMarginRate": 0.08,
-  "fTreasuryFeeRate": 0.0,
-  "fPnLPartRate": 0.0,
-  "fReferralRebateCC": 0.0004,
-  "fLiquidationPenaltyRate": 0.05,
-  "fMinimalSpread": 0.0005,
-  "fIncentiveSpread": 0.0005,
+  "fMaintenanceMarginRate": 0.05,
+  "fTreasuryFeeRate": 0.0002,
+  "fPnLPartRate": 0.0001,
+  "fReferralRebateCC": 0.1,
+  "fLiquidationPenaltyRate": 0.02,
+  "fMinimalSpread": 0.0002,
+  "fIncentiveSpread": 0.0002,
   "fLotSizeBC": 0.001,
   "fFundingRateClamp": 0.0005,
   "fMarkPriceEMALambda": 0.7,
-  "fSigma2": 0.05,
-  "fSigma3": 0.08,
-  "fRho23": 0.8,
+  "fSigma2": 0.10,
+  "fSigma3": 0.15,
+  "fRho23": 0.50,
   "eCollateralCurrency": "QUANTO",
   "fStressReturnS2": [
-    -0.15,
-    0.15
+    -0.20,
+    0.20
   ],
   "fStressReturnS3": [
-    -0.15,
+    -0.20,
     -0.05
   ],
   "fDFCoverNRate": 0.05,
@@ -28,11 +28,11 @@
     0.5
   ],
   "fAMMTargetDD": [
-    -3.2905267314918945,
-    -2.6120541412292777
+    -3.7190164854556804,
+    -2.9478425521849063
   ],
-  "fAMMMinSizeCC": 100000,
-  "fMinimalTraderExposureEMA": 30,
+  "fAMMMinSizeCC": 80000,
+  "fMinimalTraderExposureEMA": 10,
   "fMinimalAMMExposureEMA": 100,
   "fMaximalTradeSizeBumpUp": 1.5,
   "baseCurrency": "ETH",

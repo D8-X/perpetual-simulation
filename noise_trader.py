@@ -8,8 +8,8 @@ import numpy as np
 class NoiseTrader(Trader):
     def __init__(
         self, amm: 'AMM', perp_idx : int, cc: CollateralCurrency, 
-        cash_cc=np.nan, daily_trades=None, is_staker=False, prob_long=0.5):
-        super().__init__(amm, perp_idx, cc, cash_cc=cash_cc, is_staker=is_staker)
+        cash_cc=np.nan, daily_trades=None, is_best_tier=False, prob_long=0.5):
+        super().__init__(amm, perp_idx, cc, cash_cc=cash_cc, is_best_tier=is_best_tier)
 
         # fix a trade initialization probability randomly
         # one trade every one to two days
