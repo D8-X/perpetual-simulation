@@ -49,7 +49,7 @@ NUM_TRADERS = {
 # new traders join randomly - up to how many each time? 
 # e.g. if we start with N traders and multiplier is M, then there will be in average (M+1) * N traders by the end of the simulation
 # to keep same growth rate but reduced target (e.g. to go from 4 to 2 months and keep all other params the same, use divider = 2)
-GROWTH_DIVIDER = 4
+GROWTH_DIVIDER = 1
 GROWTH_MULTIPLIER = {
     'BTCUSD': 20 // GROWTH_DIVIDER, 
     'XAUUSD': 20 // GROWTH_DIVIDER, 
@@ -123,6 +123,10 @@ SIM_PARAMS['monthly_stakes'] = 1.5
 # they withdraw after exactly 1.5 months (not randomized)
 SIM_PARAMS['holding_period_months'] = 1.5
 
+
+# Parallelize run?
+RUN_PARALLEL = True
+
 def main():
     all_runs_t0 = datetime.now()
 
@@ -135,7 +139,7 @@ def main():
     # simulation period
     simulation_horizons = [
         (datetime(2022, 5, 15, 0, 0, tzinfo=timezone.utc), datetime(2022, 8, 17, 0, 0, tzinfo=timezone.utc)), 
-        (datetime(2022, 7, 3, 0, 0, tzinfo=timezone.utc), datetime(2022, 10, 16, 0, 0, tzinfo=timezone.utc)), 
+        (datetime(2022, 7, 18, 0, 0, tzinfo=timezone.utc), datetime(2022, 10, 16, 0, 0, tzinfo=timezone.utc)), 
     ]
 
     # given that a trader is about to open a position, with what probability will it be a long one?
@@ -190,9 +194,12 @@ def main():
         res = pd.DataFrame(res, index=[0])
         res.to_csv(f"./results/sim_id_{sim_params['sim_hash']}.csv", index=False)
         return res
-    
-    num_cores = multiprocessing.cpu_count() - 1
-    results = Parallel(n_jobs=num_cores)(delayed(run_single_sim)(run_config) for run_config in run_configs)
+    if RUN_PARALLEL:
+        num_cores = multiprocessing.cpu_count() - 1
+        results = Parallel(n_jobs=num_cores)(delayed(run_single_sim)(run_config) for run_config in run_configs)
+    else:
+        results = [run_single_sim(run_config) for run_config in run_configs]
+        
     result = pd.concat(results)
     result.to_csv(filename, index=False)
     
@@ -200,41 +207,6 @@ def main():
     print(f"Finished! And it only took {delta_t / 60:.1f} hours...")
     
     return 
-
-    for run_config in run_configs:
-        
-        # copy global params and assign run specific ones
-        sim_params = dict(SIM_PARAMS)
-        
-        sim_params['sim_hash'] = hash(run_config)
-        sim_params['seed'] = run_config[0]
-        sim_params['from_date'], sim_params['to_date'] = run_config[1]
-        sim_params['prob_long'] = run_config[2]
-        sim_params['initial_protocol_investment'] = run_config[3]
-        sim_params['usd_per_trader'] = run_config[4] 
-
-        print("\n" + "".join(("-" for _ in range(100))) + "\n")
-        print(f"Run details:")
-        print(f"From {sim_params['from_date']} to {sim_params['to_date']}")
-        print(f"Probability of trader taking a long position: {100 * sim_params['prob_long']:.2f}%")
-        print(f"Protocol initial funds: {to_readable_fiat(sim_params['initial_protocol_investment'])}")
-        
-        df = simulate(sim_params)
-
-        # revenue summary
-        res = report_stats(df, sim_params)
-        if results.shape[0] > 0:
-            results.loc[results.shape[0]] = res
-        else:
-            results = pd.DataFrame(res, index=[0])
-        results.to_csv(filename)
-        print(res)
-        
-
-    delta_t = (datetime.now() - all_runs_t0).total_seconds() / 60
-    results.to_csv(filename)
-    print(results)
-    print(f"Finished! And it only took {delta_t / 60:.1f} hours...")
 
 
 def report_stats(amm_state, sim):
@@ -375,25 +347,27 @@ def simulate(sim_input):
         perps.append(perp_idx)
 
         # dataframe to store simulation results
-        state_dict[perp_idx] = pd.DataFrame(
-            index=np.arange(time_df.shape[0]), 
-            columns=['idx_px', 'mark_price', 'mid_price',
-                    'perp_amm_cash', 'perp_margin', 'perp_pricing_staked_cash', 
-                    'perp_df_target',
-                    'perp_amm_target', 'perp_amm_target_baseline', 'perp_amm_target_stress', 
-                    'current_trader_exposure_EMA',
-                    'num_noise_traders', 'num_momentum_traders','num_arb_traders','num_bankrupt_traders', 
-                    'perp_volume_qc', 'perp_volume_bc', 'perp_volume_cc', 'perp_K2', 'perp_L1',
-                    'funding_rate', '10k_long_price', '10k_short_price', '100klots_long_price', '100klots_short_price',
-                    # 'current_AMM_exposure_EMA_0','current_AMM_exposure_EMA_1','current_trader_exposure_EMA',
-                    # 'protocol_btc_volume', 'locked_in_qc', 'open_interest',
-                    # 'current_locked_in_value_EMA_0','current_locked_in_value_EMA_1',
-                    # 'cex_volume_bc', 'arb_capital_used', 'arb_pnl', 'cex_px'
-                    'max_long_trade', 'max_short_trade', 'num_trades', 'max_long_price', 'max_short_price', 
-                    'avg_long_price', 'avg_short_price', 'min_long_price', 'min_short_price',
-                    ])
-        state_dict[perp_idx]['idx_px'] = idx_s2[symbol]
-        state_dict[perp_idx]['cex_px'] = cex_ts[symbol]
+        # state_dict[perp_idx] = pd.DataFrame(
+        #     index=np.arange(time_df.shape[0]), 
+        #     columns=['idx_px', 'mark_price', 'mid_price',
+        #             'perp_amm_cash', 'perp_margin', 'perp_pricing_staked_cash', 
+        #             'perp_df_target',
+        #             'perp_amm_target', 'perp_amm_target_baseline', 'perp_amm_target_stress', 
+        #             'current_trader_exposure_EMA',
+        #             'num_noise_traders', 'num_momentum_traders','num_arb_traders','num_bankrupt_traders', 
+        #             'perp_volume_qc', 'perp_volume_bc', 'perp_volume_cc', 'perp_K2', 'perp_L1',
+        #             'funding_rate', '10k_long_price', '10k_short_price', '100klots_long_price', '100klots_short_price',
+        #             # 'current_AMM_exposure_EMA_0','current_AMM_exposure_EMA_1','current_trader_exposure_EMA',
+        #             # 'protocol_btc_volume', 'locked_in_qc', 'open_interest',
+        #             # 'current_locked_in_value_EMA_0','current_locked_in_value_EMA_1',
+        #             # 'cex_volume_bc', 'arb_capital_used', 'arb_pnl', 'cex_px'
+        #             'max_long_trade', 'max_short_trade', 'num_trades', 'max_long_price', 'max_short_price', 
+        #             'avg_long_price', 'avg_short_price', 'min_long_price', 'min_short_price',
+        #             ])
+        # state_dict[perp_idx]['idx_px'] = idx_s2[symbol]
+        # state_dict[perp_idx]['cex_px'] = cex_ts[symbol]
+        
+        state_dict[perp_idx] = np.empty((time_df.shape[0], len(get_perp_state_keys())))
         # create traders
         traders.extend(
             initialize_traders(
@@ -461,7 +435,7 @@ def simulate(sim_input):
         # trading happens
         trading_starts = time.time()
         traders_pay_funding(traders)
-        liquidation_count += traders_liquidate(traders, amm)
+        liquidation_count += traders_liquidate(traders, sim=sim_state)
         trades_so_far = sim_state[symbol]['num_trades']
         traders_trade(traders, amm, sim_state, cex_ts)
         delta_trades = sim_state[symbol]['num_trades'] - trades_so_far
@@ -481,7 +455,7 @@ def simulate(sim_input):
             perp_idx = perps[i]
             perp = amm.get_perpetual(perp_idx)
             logging_perp_starts = time.time()
-            record_perp_state(t, state_dict[perp_idx], perp, sim_state[symbol])
+            record_perp_state(t, state_dict, perp, sim_state[symbol])
             logging_perp_ends = time.time()
             avg_logging_perp_time += logging_perp_ends - logging_perp_starts
             num_logging_perp_measurements += 1
@@ -578,18 +552,18 @@ def simulate(sim_input):
 
         # overall pool status
         if t % monitoring_period == 0 or t == time_df.shape[0] - 1: # or amm.get_default_fund_gap_to_target_ratio() < 0.02:
-            if num_trading_measurements > 0:
-                print(f"avg_trading_time = {avg_trading_time / num_trading_measurements}")
-            if num_logging_measurements > 0:
-                print(f"avg_logging_time = {avg_logging_time / num_logging_measurements}")
-            if num_logging_perp_measurements > 0:
-                print(f"avg_logging_perp_time = {avg_logging_perp_time / num_logging_perp_measurements}")
-            if num_joining_measurements > 0:
-                print(f"avg_joining_time = {avg_joining_time / num_joining_measurements}")
+            # if num_trading_measurements > 0:
+            #     print(f"avg_trading_time = {avg_trading_time / num_trading_measurements}")
+            # if num_logging_measurements > 0:
+            #     print(f"avg_logging_time = {avg_logging_time / num_logging_measurements}")
+            # if num_logging_perp_measurements > 0:
+            #     print(f"avg_logging_perp_time = {avg_logging_perp_time / num_logging_perp_measurements}")
+            # if num_joining_measurements > 0:
+            #     print(f"avg_joining_time = {avg_joining_time / num_joining_measurements}")
             
             S3 = perp.get_collateral_price()
             delta_t = (datetime.now() - run_t0).total_seconds() / 60
-            arb_pnl_cc = sum([sim_state[symbol]['arb_pnl'] for symbol in SYMBOLS]) / idx_s3[t]
+            # arb_pnl_cc = sum([sim_state[symbol]['arb_pnl'] for symbol in SYMBOLS]) / idx_s3[t]
             # arb_locked_usd = sum([sim_params[symbol]['arb_capital_used'] for symbol in index_vec])
             # arb_active = sum([sim_params[symbol]['num_arb_traders'] for symbol in index_vec])
             traders_active = sum([perp.get_num_active_traders() for perp in amm.perpetual_list])
@@ -615,11 +589,11 @@ def simulate(sim_input):
                 pnl_abs_cc = [f"{name}: {amm.earnings[i]: .3f}" for i, name in enumerate(SYMBOLS)]
                 print(f"PnL by perp (in {COLL}):\t" + "\t".join(pnl_abs_cc))
                 pnl_rel = [
-                    f"{name}: {100 * amm.earnings[i] * S3 / state_dict[perps[i]].at[t, 'perp_volume_qc']: .3f}" 
+                    f"{name}: {100 * amm.earnings[i] * S3 / amm.get_perpetual(perps[i]).total_volume_qc: .3f}" 
                     for i, name in enumerate(SYMBOLS)
                 ]
                 print(f"PnL by perp (%, {QUOTE} PnL over volume):\t" + "\t".join(pnl_rel))
-                pprint.pprint(report_stats(amm_state.loc[:t], sim_state))
+                # pprint.pprint(report_stats(amm_state.loc[:t], sim_state))
                 time_left = (time_df.shape[0]/t -1)*delta_t
                 print(f"{delta_t:.1f} minutes elapsed, {100.0 * t / time_df.shape[0]:.1f}% complete, approx. {1.1*time_left:.1f} minutes left.")
             else:
@@ -693,6 +667,9 @@ def simulate(sim_input):
     amm_state['total_volume_qc'] = 0
     amm_state['total_volume_cc'] = 0
     for perp_idx in perps:
+        state_dict[perp_idx] = pd.DataFrame(state_dict[perp_idx], columns=get_perp_state_keys())
+        state_dict[perp_idx]['idx_px'] = idx_s2[symbol]
+        state_dict[perp_idx]['cex_px'] = cex_ts[symbol]
         amm_state['total_volume_cc'] += state_dict[perp_idx]['perp_volume_cc']
         amm_state['total_volume_qc'] += state_dict[perp_idx]['perp_volume_qc']
     for i, symbol in enumerate(SYMBOLS):
@@ -1078,83 +1055,190 @@ def record_amm_state(t, state, amm, traders, stakers):
     # state.at[t, 'total_volume_qc'] = sum((p.total_volume * p.get_index_price() for p in amm.perpetual_list))
     # state.at[t, 'total_volume_cc'] = sum((p.total_volume * p.get_base_to_collateral_conversion(False) for p in amm.perpetual_list))
 
+def get_perp_state_keys():
+    return ['mark_price',
+        'mid_price',
+        'funding_rate',
+        # cash
+        'perp_amm_cash',
+        'perp_pricing_staked_cash',
 
+        # targets
+        'perp_amm_target',
+        'perp_amm_target_baseline',
+        'perp_amm_target_stress',
+        'perp_df_target',
+        'num_noise_traders',
+        'num_momentum_traders',
+        'num_arb_traders',
+        'num_bankrupt_traders',
 
-def record_perp_state(time_idx, state, perp, sim):
+        # aggregates 
+        'perp_volume_bc',
+        'perp_volume_qc',
+        'perp_volume_cc',
+        # state.at[time_idx, 'open_interest'] = perp.open_interest
+        
+        'current_trader_exposure_EMA',
+        'num_trades',
+        
+        # AMM margin
+        'perp_margin',
+        'perp_K2',
+        'perp_L1',
+        'max_long_trade',
+        'max_long_price',
+        'max_short_trade',
+        'max_short_price',
+        'min_long_price',
+        'min_short_price',
+        '10k_long_price',
+        '10k_short_price',
+        '100klots_long_price',
+        '100klots_short_price',
+        'avg_long_price',
+        'avg_short_price'
+        ]
+
+def record_perp_state(time_idx, state_dict, perp, sim):
     """record statistics and state"""
     
-    state.at[time_idx, 'mark_price'] = perp.get_mark_price()
-    state.at[time_idx, 'mid_price'] = 0.5 * (perp.get_price(perp.params['fLotSizeBC']) + perp.get_price(-perp.params['fLotSizeBC']))
-    state.at[time_idx, 'funding_rate'] = perp.get_funding_rate()
-    # cash
-    state.at[time_idx, 'perp_amm_cash'] = perp.amm_pool_cash_cc
-    state.at[time_idx, 'perp_pricing_staked_cash'] = perp.get_pricing_staked_cash_for_perp()
-
-    # targets
-    state.at[time_idx,'perp_amm_target'] = perp.amm_pool_target_size
-    state.at[time_idx,'perp_amm_target_baseline'] = perp.get_amm_pool_size_for_dd(perp.params['fAMMTargetDD'][0])
-    state.at[time_idx,'perp_amm_target_stress'] = perp.get_amm_pool_size_for_dd(perp.params['fAMMTargetDD'][1])
-    state.at[time_idx,'perp_df_target'] = perp.default_fund_target_size
-    state.at[time_idx,'num_noise_traders'] = sim['num_noise_traders']
-    state.at[time_idx,'num_momentum_traders'] = sim['num_momentum_traders']
-    state.at[time_idx,'num_arb_traders'] = sim['num_arb_traders']
-    state.at[time_idx,'num_bankrupt_traders'] = sim['num_bankrupt_traders']
-
-    # aggregates 
-    state.at[time_idx, 'perp_volume_bc'] = perp.total_volume_bc
-    state.at[time_idx, 'perp_volume_qc'] = perp.total_volume_qc
-    state.at[time_idx, 'perp_volume_cc'] = perp.total_volume_cc
-    # state.at[time_idx, 'open_interest'] = perp.open_interest
-    
-    state.at[time_idx,'current_trader_exposure_EMA'] = perp.current_trader_exposure_EMA
-    state.at[time_idx,'num_trades'] = sim['num_trades']
-    
-    # AMM margin
-    state.at[time_idx, 'perp_margin'] = perp.amm_trader.cash_cc
-    state.at[time_idx, 'perp_K2'] = perp.amm_trader.position_bc
-    state.at[time_idx, 'perp_L1'] = perp.amm_trader.locked_in_qc
-
-    # EMAs
-    # state.at[time_idx, 'L1_EMA-'] = perp.current_locked_in_value_EMA[0]
-    # state.at[time_idx, 'L1_EMA+'] = perp.current_locked_in_value_EMA[1]
-    # state.iloc[time_idx,'current_AMM_exposure_EMA_0'] = perp.current_AMM_exposure_EMA[0]
-    # state.iloc[time_idx,'current_AMM_exposure_EMA_1'] = perp.current_AMM_exposure_EMA[1]
-
-    # arbitrage
-    # state.at[time_idx,'arb_pnl'] = sim['arb_pnl']
-    # state.iloc[time_idx, 'cex_volume_bc'] = sim['cex_volume_bc']
-    
-    # trade sizes and premia
-
+    # pre-compute some things
     # max new long position
-    pos =  perp.get_max_signed_trade_size_for_position(0, 1)
-    state.at[time_idx,'max_long_trade'] = pos
-    state.at[time_idx,'max_long_price'] = perp.get_price(pos)
-
+    pos1 =  perp.get_max_signed_trade_size_for_position(0, 1)
     # max new short position
-    pos = perp.get_max_signed_trade_size_for_position(0, -1)
-    state.at[time_idx,'max_short_trade'] = pos
-    state.at[time_idx,'max_short_price'] = perp.get_price(pos)
-
+    pos2 = perp.get_max_signed_trade_size_for_position(0, -1)
     # min new long/short position
-    pos = perp.min_num_lots_per_pos * perp.params['fLotSizeBC']
-    state.at[time_idx,'min_long_price'] = perp.get_price(pos)
-    state.at[time_idx,'min_short_price'] = perp.get_price(-pos)
-
+    pos3 = perp.min_num_lots_per_pos * perp.params['fLotSizeBC']
     # $10,000 worth of index at spot
-    pos = 10_000 / perp.get_index_price()
-    state.at[time_idx,'10k_long_price'] = perp.get_price(pos)
-    state.at[time_idx,'10k_short_price'] = perp.get_price(-pos)
-
+    pos4 = 10_000 / perp.get_index_price()
     # 100,000 lots
-    pos = 100_000 * perp.params['fLotSizeBC']
-    state.at[time_idx, '100klots_long_price'] = perp.get_price(pos)
-    state.at[time_idx, '100klots_short_price'] = perp.get_price(-pos)
-
+    pos5 = 100_000 * perp.params['fLotSizeBC']
     # Upward-biased EMA
-    pos = perp.current_trader_exposure_EMA
-    state.at[time_idx,'avg_long_price'] = perp.get_price(pos)
-    state.at[time_idx,'avg_short_price'] = perp.get_price(-pos)
+    pos6 = perp.current_trader_exposure_EMA
+    
+    # store
+    state_dict[perp.my_idx][time_idx,:] = [
+        perp.get_mark_price(),
+        0.5 * (perp.get_price(perp.params['fLotSizeBC']) + perp.get_price(-perp.params['fLotSizeBC'])),
+        perp.get_funding_rate(),
+        # cash
+        perp.amm_pool_cash_cc,
+        perp.get_pricing_staked_cash_for_perp(),
+
+        # targets
+        perp.amm_pool_target_size,
+        perp.get_amm_pool_size_for_dd(perp.params['fAMMTargetDD'][0]),
+        perp.get_amm_pool_size_for_dd(perp.params['fAMMTargetDD'][1]),
+        perp.default_fund_target_size,
+        sim['num_noise_traders'],
+        sim['num_momentum_traders'],
+        sim['num_arb_traders'],
+        sim['num_bankrupt_traders'],
+
+        # aggregates 
+        perp.total_volume_bc,
+        perp.total_volume_qc,
+        perp.total_volume_cc,
+        # state.at[time_idx, 'open_interest'] = perp.open_interest
+        
+        perp.current_trader_exposure_EMA,
+        sim['num_trades'],
+        
+        # AMM margin
+        perp.amm_trader.cash_cc,
+        perp.amm_trader.position_bc,
+        perp.amm_trader.locked_in_qc,
+        
+        # trades and prices
+        pos1,
+        perp.get_price(pos1),
+        pos2,
+        perp.get_price(pos2),
+        perp.get_price(pos3),
+        perp.get_price(-pos3),
+        perp.get_price(pos4),
+        perp.get_price(-pos4),
+        perp.get_price(pos5),
+        perp.get_price(-pos5),
+        perp.get_price(pos6),
+        perp.get_price(-pos6),    
+    ]
+    
+    
+    
+    # state.at[time_idx, 'mark_price'] = perp.get_mark_price()
+    # state.at[time_idx, 'mid_price'] = 0.5 * (perp.get_price(perp.params['fLotSizeBC']) + perp.get_price(-perp.params['fLotSizeBC']))
+    # state.at[time_idx, 'funding_rate'] = perp.get_funding_rate()
+    # # cash
+    # state.at[time_idx, 'perp_amm_cash'] = perp.amm_pool_cash_cc
+    # state.at[time_idx, 'perp_pricing_staked_cash'] = perp.get_pricing_staked_cash_for_perp()
+
+    # # targets
+    # state.at[time_idx,'perp_amm_target'] = perp.amm_pool_target_size
+    # state.at[time_idx,'perp_amm_target_baseline'] = perp.get_amm_pool_size_for_dd(perp.params['fAMMTargetDD'][0])
+    # state.at[time_idx,'perp_amm_target_stress'] = perp.get_amm_pool_size_for_dd(perp.params['fAMMTargetDD'][1])
+    # state.at[time_idx,'perp_df_target'] = perp.default_fund_target_size
+    # state.at[time_idx,'num_noise_traders'] = sim['num_noise_traders']
+    # state.at[time_idx,'num_momentum_traders'] = sim['num_momentum_traders']
+    # state.at[time_idx,'num_arb_traders'] = sim['num_arb_traders']
+    # state.at[time_idx,'num_bankrupt_traders'] = sim['num_bankrupt_traders']
+
+    # # aggregates 
+    # state.at[time_idx, 'perp_volume_bc'] = perp.total_volume_bc
+    # state.at[time_idx, 'perp_volume_qc'] = perp.total_volume_qc
+    # state.at[time_idx, 'perp_volume_cc'] = perp.total_volume_cc
+    # # state.at[time_idx, 'open_interest'] = perp.open_interest
+    
+    # state.at[time_idx,'current_trader_exposure_EMA'] = perp.current_trader_exposure_EMA
+    # state.at[time_idx,'num_trades'] = sim['num_trades']
+    
+    # # AMM margin
+    # state.at[time_idx, 'perp_margin'] = perp.amm_trader.cash_cc
+    # state.at[time_idx, 'perp_K2'] = perp.amm_trader.position_bc
+    # state.at[time_idx, 'perp_L1'] = perp.amm_trader.locked_in_qc
+
+    # # EMAs
+    # # state.at[time_idx, 'L1_EMA-'] = perp.current_locked_in_value_EMA[0]
+    # # state.at[time_idx, 'L1_EMA+'] = perp.current_locked_in_value_EMA[1]
+    # # state.iloc[time_idx,'current_AMM_exposure_EMA_0'] = perp.current_AMM_exposure_EMA[0]
+    # # state.iloc[time_idx,'current_AMM_exposure_EMA_1'] = perp.current_AMM_exposure_EMA[1]
+
+    # # arbitrage
+    # # state.at[time_idx,'arb_pnl'] = sim['arb_pnl']
+    # # state.iloc[time_idx, 'cex_volume_bc'] = sim['cex_volume_bc']
+    
+    # # trade sizes and premia
+
+    # # max new long position
+    # pos =  perp.get_max_signed_trade_size_for_position(0, 1)
+    # state.at[time_idx,'max_long_trade'] = pos
+    # state.at[time_idx,'max_long_price'] = perp.get_price(pos)
+
+    # # max new short position
+    # pos = perp.get_max_signed_trade_size_for_position(0, -1)
+    # state.at[time_idx,'max_short_trade'] = pos
+    # state.at[time_idx,'max_short_price'] = perp.get_price(pos)
+
+    # # min new long/short position
+    # pos = perp.min_num_lots_per_pos * perp.params['fLotSizeBC']
+    # state.at[time_idx,'min_long_price'] = perp.get_price(pos)
+    # state.at[time_idx,'min_short_price'] = perp.get_price(-pos)
+
+    # # $10,000 worth of index at spot
+    # pos = 10_000 / perp.get_index_price()
+    # state.at[time_idx,'10k_long_price'] = perp.get_price(pos)
+    # state.at[time_idx,'10k_short_price'] = perp.get_price(-pos)
+
+    # # 100,000 lots
+    # pos = 100_000 * perp.params['fLotSizeBC']
+    # state.at[time_idx, '100klots_long_price'] = perp.get_price(pos)
+    # state.at[time_idx, '100klots_short_price'] = perp.get_price(-pos)
+
+    # # Upward-biased EMA
+    # pos = perp.current_trader_exposure_EMA
+    # state.at[time_idx,'avg_long_price'] = perp.get_price(pos)
+    # state.at[time_idx,'avg_short_price'] = perp.get_price(-pos)
 
 
 def to_readable_fiat(x):

@@ -9,7 +9,7 @@ import re
 COLL = 'USD'
 QUOTE = 'USD'
 
-FILENAME = 'results/res67-0-ETHUSDUSD_2022105--6586155112060498296.csv'
+FILENAME = 'results/res212-0-MATICUSDUSD_2022815-5218206543259871579.csv'
 
 perpsymbol = re.search("-[A-Z]+_", FILENAME).group(0)[1:-1] 
 INDEX = perpsymbol[:(len(perpsymbol) - len(QUOTE + COLL))]

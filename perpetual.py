@@ -4,7 +4,6 @@
 # Perpetual class
 #
 
-from email.mime import base
 import numpy as np
 from trader import CollateralCurrency, Trader
 from amm_trader import AMMTrader
@@ -105,6 +104,7 @@ class Perpetual:
         self.trader_status = dict()
         self.max_position = max_position
         self.min_num_lots_per_pos = 10
+        self.last_df_transfer = amm.get_timestamp()
 
     def inc_time(self):
         # move the EMA of the premium forward
@@ -283,11 +283,11 @@ class Perpetual:
         rate = np.max((premium_rate, c)) + \
             np.min((premium_rate, -c)) + np.sign(-self.amm_trader.position_bc)*0.0001
         rate = rate * self.glbl_params['block_time_sec']/(8*60*60)
-        max_rate = (self.params['fInitialMarginRate']-
-                    self.params['fMaintenanceMarginRate'])*0.9
-        min_rate = -max_rate
-        rate = np.max((rate, min_rate)) if rate < 0 else np.min(
-            (rate, max_rate))
+        # max_rate = (self.params['fInitialMarginRate']-
+        #             self.params['fMaintenanceMarginRate'])*0.9
+        # min_rate = -max_rate
+        # rate = np.max((rate, min_rate)) if rate < 0 else np.min(
+        #     (rate, max_rate))
         return rate
 
     def get_base_to_collateral_conversion(self, is_mark_price: bool):
@@ -404,6 +404,7 @@ class Perpetual:
             #     return
             #     print(f"DANGER!!!\n----------\nBelow baseline target but not above target pd!!\n{100*pd:.2f}% < {100*pd_target:.2f}%")
             self.amm_pool_target_size = baseline_target_size
+            self.last_df_transfer = self.my_amm.get_timestamp()
             return
         # we are below baseline target, two options
         # 1 - we are still above stress target. we set new target to baseline, and do nothing after that.
@@ -436,26 +437,32 @@ class Perpetual:
             #     return
             #     print(f"DANGER!!!\n----------\nBelow stress target but not above target pd!!\n{100*pd:.2f}% < {100*pd_target:.2f}%")
             self.amm_pool_target_size = baseline_target_size
+            self.last_df_transfer = self.my_amm.get_timestamp()
             return
 
         self.amm_pool_target_size = stress_target_size
         # draw funds in relation to available size from default fund
         # If default fund is funded at rate r we withdraw at most min(1, r%) from it
-        gap = stress_target_size - self.amm_pool_cash_cc
-        fill_rate = np.min(
-            (0.5, self.my_amm.get_default_fund_gap_to_target_ratio())
-        )
+        gap = 0.75*(stress_target_size - self.amm_pool_cash_cc)
+        
         gap_fill_df = np.min(
-            (gap, fill_rate * self.my_amm.default_fund_cash_cc)
+            (gap, 0.75 * self.my_amm.default_fund_cash_cc)
         )
+        
+        self.my_amm.transfer_from_df_to_amm(self, gap_fill_df)
+        
         # draw funds from pnl participants who don't otherwise contribute to
         # the default fund
         gap = gap - gap_fill_df
-        gap_fill_staker = 0 # set to zero, pnl participants now participate in pricing
-      
-        self.my_amm.default_fund_cash_cc -= gap_fill_df
+        
+        gap_fill_staker = np.min(
+            (gap, 0.75 * self.my_amm.staker_cash_cc)
+        )
+        
+        # self.my_amm.default_fund_cash_cc -= gap_fill_df
         self.my_amm.staker_cash_cc -= gap_fill_staker
-        self.amm_pool_cash_cc += gap_fill_df + gap_fill_staker
+        self.amm_pool_cash_cc += gap_fill_staker
+        # self.amm_pool_cash_cc += gap_fill_df + gap_fill_staker
 
 
     def get_amm_pool_size_for_dd(self, dd):

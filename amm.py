@@ -24,7 +24,7 @@ class AMM:
         self.staker_cash_cc = 0
         self.staker_pricing_cash_ratio = 0 # 'P'
         self.last_pricing_cash_update = 0
-        self.total_pricing_incorporation_time = 60 * 60 * 24 * 5 # in seconds
+        self.fund_transfer_convergence_time = 60 * 60 * 24 * 5 # in seconds
         self.max_PtoDF_ratio = 0.75 
         self.max_liquidity_inc_delta = np.inf # how much in CC ccy can the pot of staker cash used in pricing increase in a given incorporation cycle (one day above)?
 
@@ -131,8 +131,8 @@ class AMM:
             p.update_AMM_pool_size_target()
 
     def get_timestamp(self):
-        # time elapsed in seconds
-        return self.current_time*self.params["block_time_sec"]
+        # time elapsed in seconds, we start after one block
+        return (1 + self.current_time)*self.params["block_time_sec"]
 
     def __update_target_pool_sizes(self):
         # frequent update of AMM pool size
@@ -304,12 +304,33 @@ class AMM:
             self.staker_pricing_cash_ratio = staker_pricing_cash_cc / self.staker_cash_cc
         self.last_pricing_cash_update = self.get_timestamp()
 
+    
+    def transfer_from_df_to_amm(self, perp, amount):
+        ts_now = self.get_timestamp()
+        if ts_now <= perp.last_df_transfer:
+            return
+        scale = (ts_now - perp.last_df_transfer) / self.fund_transfer_convergence_time
+        if amount <= 0:
+            # no gap to fill
+            return
+        target = perp.amm_pool_cash_cc + amount
+        delta_cash_cc = np.min(
+            (scale * target, 0.25 * self.default_fund_cash_cc)
+        )
+        if delta_cash_cc > amount:
+            delta_cash_cc = amount
+        self.default_fund_cash_cc -= delta_cash_cc
+        perp.amm_pool_cash_cc += delta_cash_cc
+        perp.last_df_transfer = ts_now
+        
+        
+    
     def increment_pricing_staker_cash(self):
         ts_now = self.get_timestamp()
         if ts_now <= self.last_pricing_cash_update or self.staker_cash_cc == 0:
             return
 
-        z = (ts_now - self.last_pricing_cash_update) / self.total_pricing_incorporation_time
+        z = (ts_now - self.last_pricing_cash_update) / self.fund_transfer_convergence_time
         P_max = self.max_PtoDF_ratio * self.default_fund_cash_cc
         staker_pricing_cash_cc = self.staker_pricing_cash_ratio * self.staker_cash_cc
         gap_to_max = P_max - staker_pricing_cash_cc
