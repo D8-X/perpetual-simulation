@@ -1,6 +1,7 @@
 */*.pyc
 *.pkl
 results/res*.csv
+results/sim_id*.csv
 *.aux
 *.bbl
 *.blg

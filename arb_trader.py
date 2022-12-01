@@ -84,10 +84,9 @@ class ArbTrader(Trader):
             dPos ([float]): position size change
             is_close (bool): true if close-only
         """
-        px = self.amm.trade_with_amm(self, dPos, is_close)
-        if px is None:
-            return None
-        self.calc_pnl_from_trade(px, dPos, is_close)
+        px = super().trade(dPos, is_close)
+        if px:
+            self.calc_pnl_from_trade(px, dPos, is_close)
         return px
 
     def calc_pnl_from_trade(self, px, dPos, is_close):

@@ -24,17 +24,17 @@ class AMM:
         self.staker_cash_cc = 0
         self.staker_pricing_cash_ratio = 0 # 'P'
         self.last_pricing_cash_update = 0
-        self.fund_transfer_convergence_time = 60 * 60 * 24 * 5 # in seconds
+        self.fund_transfer_convergence_time = 60 * 60 * params['iFundTransferConvergenceHours'] # 3 days in seconds
         self.max_PtoDF_ratio = 0.75 
-        self.max_liquidity_inc_delta = np.inf # how much in CC ccy can the pot of staker cash used in pricing increase in a given incorporation cycle (one day above)?
+        # how much in CC ccy can the pot of staker cash used in pricing increase in a given incorporation cycle (one day above)?
+        self.max_liquidity_inc_delta = params['fMaxTransferPerConvergencePeriodCC'] 
 
         # protocol stuff
         self.default_fund_cash_cc = initial_default_fund_cash_cc
         self.protocol_earnings_vault = 0
         self.is_emergency = False
-        self.last_target_pool_size_update = -params["target_pool_size_update_time"]/2 # in seconds
+        self.last_target_pool_size_update = -params["iTargetPoolSizeUpdateTime"]/2 # in seconds
         self.liquidator_earnings_vault = 0
-        self.is_ever_updated = False
         self.trade_count = 0
         self.fees_earned = 0
         self.trader_dir = []
@@ -140,47 +140,29 @@ class AMM:
         # rare update of default fund size
         ts_now = self.get_timestamp()
         dT = ts_now - self.last_target_pool_size_update
-        if dT < self.params['target_pool_size_update_time'] and self.is_ever_updated:
+        if dT < self.params['iTargetPoolSizeUpdateTime']:
             return
         self.__update_DF_size_target()
         self.last_target_pool_size_update = ts_now
-        self.is_ever_updated = True
 
     def trade_with_amm(self, trader : 'Trader', amount_bc : float, is_close_only: bool):
-        # initial_protocol_cash = self.get_total_protocol_cash()
-        # initial_user_cash = self.get_total_user_cash() - trader.cash_cc
-        # initial_single_trader_cash = trader.cash_cc
-
         perp_idx = trader.perp_idx
         perpetual = self.perpetual_list[perp_idx]
         # try to trade
-        # staker_cash_before = self.staker_cash_cc
         px = perpetual.trade(trader, amount_bc, is_close_only)
         if px is None:
             # trade failed
             return None
-        # self.staker_return_ema = (1 - self.staker_return_ema_lambda) * self.staker_return_ema + self.staker_return_ema_lambda * (self.staker_cash_cc / staker_cash_before - 1)
         # trade was successful, keep track of trader status
         perpetual.trader_status[trader.id] = trader.is_active and trader.position_bc != 0
         self.trade_count += 1
         # update default fund size and AMM pool size targets
         self.__update_target_pool_sizes()
-
-        # final_protocol_cash = self.get_total_protocol_cash()
-        # final_user_cash = self.get_total_user_cash() - trader.cash_cc
-        # final_single_trader_cash = trader.cash_cc
-        # cash is neither created nor destroyed
-        # if not (np.abs((final_protocol_cash + final_user_cash + final_single_trader_cash) - (initial_protocol_cash+initial_user_cash+initial_single_trader_cash)) < 1e-10):
-        #     print(f"final_protocol_cash - initial_protocol_cash = {final_protocol_cash - initial_protocol_cash}")
-        #     print(f"final_user_cash - initial_user_cash = {final_user_cash - initial_user_cash}")
-        #     print(f"final_single_trader_cash - initial_single_trader_cash = {final_single_trader_cash - initial_single_trader_cash}")
-        #     quit()
         return px
 
     def round_to_lot(self, amount_bc, lot):
         """ rounds to lot (downwards in absolute value): 
         when booking a trade, any amount left over the highest lot-amount is not used"""
-        # lot =  self.params['fLotSizeBC']
         rounded = np.round(np.abs(amount_bc) / lot) * lot
         assert(np.abs(rounded - np.abs(amount_bc)) <= lot)
         return rounded if amount_bc > 0 else -rounded
@@ -188,12 +170,7 @@ class AMM:
     def shrink_to_lot(self, amount_bc, lot):
         """ rounds to lot (downwards in absolute value): 
         when booking a trade, any amount left over the highest lot-amount is not used"""
-        # lot =  self.params['fLotSizeBC']
         rounded = np.floor(np.abs(amount_bc) / lot) * lot
-        # if rounded > np.abs(amount_bc):
-        #     print(f"rounded={rounded}")
-        #     print(f"amount_bc={amount_bc}")
-        # assert(rounded <= np.abs(amount_bc), f"{rounded}>{np.abs(amount_bc)}")
         return rounded if amount_bc > 0 else -rounded
 
     def grow_to_lot(self, amount_bc, lot):
@@ -305,23 +282,23 @@ class AMM:
         self.last_pricing_cash_update = self.get_timestamp()
 
     
-    def transfer_from_df_to_amm(self, perp, amount):
-        ts_now = self.get_timestamp()
-        if ts_now <= perp.last_df_transfer:
-            return
-        scale = (ts_now - perp.last_df_transfer) / self.fund_transfer_convergence_time
+    def transfer_from_df_to_amm(self, perp, amount, target):
         if amount <= 0:
             # no gap to fill
-            return
-        target = perp.amm_pool_cash_cc + amount
-        delta_cash_cc = np.min(
-            (scale * target, 0.25 * self.default_fund_cash_cc)
-        )
+            return 0
+        # once per block
+        ts_now = self.get_timestamp()
+        if ts_now <= perp.last_df_transfer:
+            return 0
+        scale = np.min((1, (ts_now - perp.last_df_transfer) / self.fund_transfer_convergence_time))
+        # cap amount to transfer
+        delta_cash_cc = scale * np.min((target, self.max_liquidity_inc_delta))
         if delta_cash_cc > amount:
             delta_cash_cc = amount
         self.default_fund_cash_cc -= delta_cash_cc
         perp.amm_pool_cash_cc += delta_cash_cc
         perp.last_df_transfer = ts_now
+        return delta_cash_cc
         
         
     
