@@ -441,9 +441,7 @@ def simulate(sim_input):
             do_print = (
                 t % monitoring_period == 0  or
                 amm.get_default_fund_gap_to_target_ratio() < 0.02 or
-                np.abs(perp.get_mark_price() / perp.get_index_price() - 1) > 0.05 or
-                max_long < 2 * min_pos_size or
-                max_short > - 2 * min_pos_size
+                np.abs(perp.get_mark_price() / perp.get_index_price() - 1) > 0.05
             )
                 
             if do_print:
