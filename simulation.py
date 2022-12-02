@@ -30,7 +30,7 @@ INDEX = ['BTC', 'ETH', 'XAU', 'BNB', 'CHF', 'GBP', 'SPY', 'MATIC', 'LINK']
 
 # This simulation's quote and collateral currency
 QUOTE = 'USD'
-COLL = 'USD'
+COLL = 'MATIC'
 
 # traders that join on day 1
 NUM_TRADERS = {
@@ -1022,7 +1022,7 @@ def record_initial_endowment(traders):
 
 
 def get_amm_state_keys():
-    return [
+    keys = [
         "amm_cash",
         "pool_margin",
         "pricing_staked_cash",
@@ -1038,11 +1038,14 @@ def get_amm_state_keys():
         "trader_pnl_cc",
         "lp_apy",
     ]
+    for i, name in enumerate(SYMBOLS):
+        keys.append(f"{name}_pnl_cc")
+    return keys
 
 def record_amm_state(t, state, amm, stakers, traders):
 
     amm_cash = amm.get_amm_funds()
-    state[t,:] = [
+    new_state = [
         amm_cash,
         sum((p.amm_trader.cash_cc  for p in amm.perpetual_list)),
         sum((p.get_pricing_staked_cash_for_perp() for p in amm.perpetual_list)),
@@ -1059,6 +1062,8 @@ def record_amm_state(t, state, amm, stakers, traders):
         sum(t.pnl_cc for t in traders if t.position_bc != 0),
         np.nanmean([s.get_apy() for s in stakers if s.has_staked])
     ]
+    new_state.extend([amm.earnings[i] for i, name in enumerate(SYMBOLS)])
+    state[t,:] = new_state
 
 
 def get_perp_state_keys():

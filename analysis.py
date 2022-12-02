@@ -145,12 +145,12 @@ def plot_pos_sizes(ax, df):
     #axs[1,0].xaxis.set_major_formatter(mdates.DateFormatter('%y-%m-%d'))
 
 def plot_num_traders(ax, df):
-    ax.plot(df['datetime'], df['num_noise_traders'], 'kd', label='noise traders')
-    ax.plot(df['datetime'], df['num_arb_traders'], 'g+', label='arb traders')
-    ax.plot(df['datetime'], df['num_momentum_traders'], 'bx', label='momentum traders')
-    ax.plot(df['datetime'], df['num_bankrupt_traders'], 'r:', label='bankrupt')
-    ax.plot(df['datetime'], df['num_noise_traders'] + df['num_arb_traders'] + df['num_momentum_traders'], 'y', label='total active traders')
-    ax.set(xlabel="Time", ylabel="#traders")
+    ax.plot(df['datetime'], df['num_noise_traders'], 'kd', label='Noise')
+    ax.plot(df['datetime'], df['num_arb_traders'], 'g+', label='Arb')
+    ax.plot(df['datetime'], df['num_momentum_traders'], 'bx', label='Momentum')
+    ax.plot(df['datetime'], df['num_bankrupt_traders'], 'r:', label='Bankrupt')
+    ax.plot(df['datetime'], df['num_noise_traders'] + df['num_arb_traders'] + df['num_momentum_traders'], 'y', label='Total Active')
+    ax.set(xlabel="Time", ylabel="Number of traders")
     ax.legend()
     ax.grid(linestyle='--', linewidth=1)
     ax.xaxis.set_major_formatter(mdates.DateFormatter('%y-%m-%d'))
@@ -165,7 +165,8 @@ def plot_prices(ax, df):
     
     
 def plot_trader_pnl(ax, df):
-    ax.plot(df['datetime'], df['idx_px'], 'k-', label="index price")
+    ax.plot(df['datetime'], df['trader_pnl'], 'k-', label="")
+    
     ax.plot(df['datetime'], df['mark_price'], 'r:', label="mark price")
     ax.set(xlabel="Time", ylabel=f"{INDEX}/{QUOTE}")
     ax.grid(linestyle='--', linewidth=1)
