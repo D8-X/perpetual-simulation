@@ -31,9 +31,9 @@
     -3.719016,
     -3.540084
   ],
-  "fAMMMinSizeCC": 100000,
-  "fMinimalTraderExposureEMA": 4.5,
-  "fMinimalAMMExposureEMA": 10,
+  "fAMMMinSizeCC": 90000,
+  "fMinimalTraderExposureEMA": 4,
+  "fMinimalAMMExposureEMA": 9,
   "fMaximalTradeSizeBumpUp": 2.25,
   "baseCurrency": "BTC",
   "quoteCurrency": "USD",

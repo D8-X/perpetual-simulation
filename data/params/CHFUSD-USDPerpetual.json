@@ -1,9 +1,9 @@
 {
   "fInitialMarginRate": 0.05,
   "fMaintenanceMarginRate": 0.03,
-  "fTreasuryFeeRate": 0,
-  "fPnLPartRate": 0,
-  "fReferralRebateCC": 0.1,
+  "fTreasuryFeeRate": 0.000075,
+  "fPnLPartRate": 0.000025,
+  "fReferralRebateCC": 0.01,
   "fLiquidationPenaltyRate": 0.01,
   "fMinimalSpread": 0.00005,
   "fIncentiveSpread": 0.00015,

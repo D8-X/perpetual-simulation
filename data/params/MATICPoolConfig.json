@@ -1,0 +1,14 @@
+[
+    {
+        "name": "MATIC",
+        "chainId": 80001,
+        "description": "Pool config for polygon-testnet (mumbai) with mock-MATIC address for margintoken",
+        "iTargetPoolSizeUpdateTime": 28800,
+        "marginTokenName": "MATIC",
+        "marginTokenAddress": "0x215975839684a365df2387b1f0FcEaBf4F0B77eb",
+        "treasuryAddress": "0x9d5aaB428e98678d0E645ea4AeBd25f744341a05",
+        "iFundTransferConvergenceHours": 24,
+        "fMaxTransferPerConvergencePeriodCC": 80000,
+        "brokerCollateralLotSize": 160
+    }
+]

@@ -3,7 +3,7 @@
   "fMaintenanceMarginRate": 0.03,
   "fTreasuryFeeRate": 0.000075,
   "fPnLPartRate": 0.000025,
-  "fReferralRebateCC": 0.1,
+  "fReferralRebateCC": 0.01,
   "fLiquidationPenaltyRate": 0.01,
   "fMinimalSpread": 0.00015,
   "fIncentiveSpread": 0.00005,
@@ -31,7 +31,7 @@
     -3.719016,
     -3.540084
   ],
-  "fAMMMinSizeCC": 100000,
+  "fAMMMinSizeCC": 76000,
   "fMinimalTraderExposureEMA": 45,
   "fMinimalAMMExposureEMA": 100,
   "fMaximalTradeSizeBumpUp": 2.25,

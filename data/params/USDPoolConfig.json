@@ -7,8 +7,8 @@
         "marginTokenName": "USDC",
         "marginTokenAddress": "0xeB4E22B2AD4D9d07C25A32f57d85a4F41ca6b8FF",
         "treasuryAddress": "0x9d5aaB428e98678d0E645ea4AeBd25f744341a05",
-        "iFundTransferConvergenceHours": 1,
-        "fMaxTransferPerConvergencePeriodCC": 20000,
+        "iFundTransferConvergenceHours": 24,
+        "fMaxTransferPerConvergencePeriodCC": 100000,
         "brokerCollateralLotSize": 100
     }
 ]

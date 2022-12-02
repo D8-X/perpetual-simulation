@@ -1,22 +1,22 @@
 {
-  "fInitialMarginRate": 0.05,
-  "fMaintenanceMarginRate": 0.03,
+  "fInitialMarginRate": 0.10,
+  "fMaintenanceMarginRate": 0.05,
   "fTreasuryFeeRate": 0.000075,
   "fPnLPartRate": 0.000025,
   "fReferralRebateCC": 0.01,
   "fLiquidationPenaltyRate": 0.01,
-  "fMinimalSpread": 0.00005,
-  "fIncentiveSpread": 0.00015,
+  "fMinimalSpread": 0.0002,
+  "fIncentiveSpread": 0.0001,
   "fLotSizeBC": 1,
   "fFundingRateClamp": 0.0005,
   "fMarkPriceEMALambda": 0.7,
-  "fSigma2": 0.02,
+  "fSigma2": 0.12,
   "fSigma3": 0,
   "fRho23": 0,
-  "eCollateralCurrency": "QUOTE",
+  "eCollateralCurrency": "BASE",
   "fStressReturnS2": [
-    -0.05,
-    0.05
+    -0.25,
+    0.25
   ],
   "fStressReturnS3": [
     0,
@@ -28,14 +28,14 @@
     0.5
   ],
   "fAMMTargetDD": [
-    -3.719016,
+    -3.431614,
     -3.352795
   ],
-  "fAMMMinSizeCC": 125000,
-  "fMinimalTraderExposureEMA": 70000,
-  "fMinimalAMMExposureEMA": 210000,
+  "fAMMMinSizeCC": 72000,
+  "fMinimalTraderExposureEMA": 80000,
+  "fMinimalAMMExposureEMA": 240000,
   "fMaximalTradeSizeBumpUp": 3,
-  "baseCurrency": "GBP",
+  "baseCurrency": "MATIC",
   "quoteCurrency": "USD",
-  "collateralCurrency": "USD"
+  "collateralCurrency": "MATIC"
 }
