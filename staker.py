@@ -28,17 +28,31 @@ class Staker(ABC):
         if not self.has_staked or self.deposit_cash_cc <= 0:
             return np.nan
         delta_t = self.amm.get_timestamp() - self.deposit_time
-        if delta_t < 60 * 60: # at least an hour
+        if delta_t < (24 * 60 * 60): # at least a day
             return np.nan
         pos_value_cc = self.get_position_value_cc()
-        if pos_value_cc <= 0:
+        if np.isnan(pos_value_cc): 
+            return np.nan
+        if pos_value_cc < 1:
             return -1
+        N = (365 * 24 * 60 * 60) / delta_t
+        r_nom = self.get_position_value_cc() / self.deposit_cash_cc - 1
+        return (1 + r_nom / N) ** N - 1
         
-        return (365 * 24 * 60 * 60 / delta_t) * (self.get_position_value_cc() / self.deposit_cash_cc - 1)
+        return np.exp((365 * 24 * 60 * 60 / delta_t) * np.log(pos_value_cc / self.deposit_cash_cc)) - 1
+    # c_t_sec = e^(t_sec * r) c0
+    # r = 1/t_sec  * ln(c_t/c_0)
+    # c_1year = e^{1 year * r} c_0 = e^{1 year / n seconds} * r} ^ {n_seconds} c_0
+    # apy = c_1year / c_0 - 1 = e^{1 year in seconds  * 1/delta_seconds * ln(c_t / c_0)} - 1
 
     def get_position_value_cc(self):
+        if self.share_tokens > 0 and (self.share_tokens / self.amm.share_token_supply) > 0.001:
+            return np.nan
+        else:
+            return self.cash_cc
+        
         value = self.cash_cc
-        if self.share_tokens > 0 and self.amm.share_token_supply > 0:
+        if self.share_tokens > 0 and self.amm.share_token_supply > 1:
             value += (self.share_tokens / self.amm.share_token_supply) * self.amm.staker_cash_cc
         return value
 

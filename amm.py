@@ -230,12 +230,14 @@ class AMM:
         self.last_pricing_cash_update = self.get_timestamp()
 
     def remove_liquidity(self, staker, tokens):
-        if tokens == 0 or self.share_token_supply == 0:
+        if tokens <= 0 or self.share_token_supply <= 0:
             return
+        if tokens >= staker.share_tokens:
+            tokens = staker.share_tokens
 
-        assert(tokens > 0 and tokens <= staker.share_tokens)
+        # assert(tokens > 0 and tokens <= staker.share_tokens)
         # assert(tokens <= self.share_token_supply)
-        if tokens > self.share_token_supply:
+        if tokens >= self.share_token_supply:
             print(f"tokens={tokens}, staker tokens={staker.share_tokens}, total supply={self.share_token_supply}")
             tokens = self.share_token_supply
             cash_cc = self.staker_cash_cc

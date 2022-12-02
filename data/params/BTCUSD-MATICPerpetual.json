@@ -28,13 +28,13 @@
     0.5
   ],
   "fAMMTargetDD": [
-    -3.719016,
+    -3.540084,
     -3.431614
   ],
-  "fAMMMinSizeCC": 69000,
-  "fMinimalTraderExposureEMA": 7,
-  "fMinimalAMMExposureEMA": 8.4,
-  "fMaximalTradeSizeBumpUp": 1.2,
+  "fAMMMinSizeCC": 74000,
+  "fMinimalTraderExposureEMA": 6,
+  "fMinimalAMMExposureEMA": 9,
+  "fMaximalTradeSizeBumpUp": 1.5,
   "baseCurrency": "BTC",
   "quoteCurrency": "USD",
   "collateralCurrency": "MATIC"
