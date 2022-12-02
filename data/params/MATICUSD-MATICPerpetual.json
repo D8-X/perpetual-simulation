@@ -31,10 +31,10 @@
     -3.431614,
     -3.352795
   ],
-  "fAMMMinSizeCC": 72000,
+  "fAMMMinSizeCC": 55000,
   "fMinimalTraderExposureEMA": 80000,
-  "fMinimalAMMExposureEMA": 240000,
-  "fMaximalTradeSizeBumpUp": 3,
+  "fMinimalAMMExposureEMA": 200000,
+  "fMaximalTradeSizeBumpUp": 2.5,
   "baseCurrency": "MATIC",
   "quoteCurrency": "USD",
   "collateralCurrency": "MATIC"

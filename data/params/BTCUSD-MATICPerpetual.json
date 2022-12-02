@@ -1,6 +1,6 @@
 {
-  "fInitialMarginRate": 0.1,
-  "fMaintenanceMarginRate": 0.05,
+  "fInitialMarginRate": 0.05,
+  "fMaintenanceMarginRate": 0.03,
   "fTreasuryFeeRate": 0.000075,
   "fPnLPartRate": 0.000025,
   "fReferralRebateCC": 0.01,
@@ -31,10 +31,10 @@
     -3.719016,
     -3.431614
   ],
-  "fAMMMinSizeCC": 90000,
-  "fMinimalTraderExposureEMA": 4,
-  "fMinimalAMMExposureEMA": 9,
-  "fMaximalTradeSizeBumpUp": 2.25,
+  "fAMMMinSizeCC": 69000,
+  "fMinimalTraderExposureEMA": 7,
+  "fMinimalAMMExposureEMA": 8.4,
+  "fMaximalTradeSizeBumpUp": 1.2,
   "baseCurrency": "BTC",
   "quoteCurrency": "USD",
   "collateralCurrency": "MATIC"

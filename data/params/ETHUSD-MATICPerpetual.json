@@ -1,6 +1,6 @@
 {
-  "fInitialMarginRate": 0.10,
-  "fMaintenanceMarginRate": 0.05,
+  "fInitialMarginRate": 0.05,
+  "fMaintenanceMarginRate": 0.03,
   "fTreasuryFeeRate": 0.000075,
   "fPnLPartRate": 0.000025,
   "fReferralRebateCC": 0.01,
@@ -31,10 +31,10 @@
     -3.719016,
     -3.431614
   ],
-  "fAMMMinSizeCC": 80000,
-  "fMinimalTraderExposureEMA": 10,
-  "fMinimalAMMExposureEMA": 100,
-  "fMaximalTradeSizeBumpUp": 1.5,
+  "fAMMMinSizeCC": 62000,
+  "fMinimalTraderExposureEMA": 90,
+  "fMinimalAMMExposureEMA": 108,
+  "fMaximalTradeSizeBumpUp": 1.2,
   "baseCurrency": "ETH",
   "quoteCurrency": "USD",
   "collateralCurrency": "MATIC"
