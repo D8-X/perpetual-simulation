@@ -5,12 +5,13 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 from datetime import datetime
+from matplotlib.pyplot import cm
 from simulation import load_perp_params
 
-COLL = 'USD'
+COLL = 'MATIC'
 QUOTE = 'USD'
 
-FILENAME = 'results/res119-0-MATICUSDUSD_2022815-1599570409097170030.csv'
+FILENAME = 'results/res107-0-ETHUSDMATIC_20221020--8985315591111932502.csv'
 
 perpsymbol = re.search("-[A-Z]+_", FILENAME).group(0)[1:-1] 
 INDEX = perpsymbol[:(len(perpsymbol) - len(QUOTE + COLL))]
@@ -50,12 +51,31 @@ def main():
 
     print("\nOpen+Close 100K lots summary:")
     x = (df['100klots_long_slip'].abs() + df['100klots_short_slip'].abs()).values
-    q = [0.01, 0.05, 0.25, 0.5, 0.75, 0.95, 0.99]
+    q = [0.01, 0.05, 0.25, 0.5, 0.6, 0.7, 0.8, 0.9, 0.95]
     v = np.quantile(x, q)
     print("\n".join([f"{100*_q:.1f}%: {1e4 *_v: .4f} bps" for _q, _v in zip(q,v)]))
-    print(f"mean +- stddev: {np.mean(x)} +- {np.std(x)}")
+    print(f"mean +- stddev: {np.mean(1e4 * x)} +- {np.std(1e4 * x)} (bps)")
+    
+    
+    # fig, ax = plt.subplots(2, 1, sharex=True)    
+    
+    # n, bins, patches = ax[0].hist(1e4 * x, bins=200, facecolor='#2ab0ff', edgecolor='#e0e0e0', linewidth=0.5, alpha=0.7, density=True)
+    # n = n.astype('int') # it MUST be integer
+    # ax[0].title('Open and Close 100 ETH', fontsize=12)
+    # ax[0].xlabel('Total slippage (bps)', fontsize=10)
+    # ax[0].ylabel('Frequency', fontsize=10)
+    # plt.show()
+
+
 
     print("\nFunding rate accrued over 8h summary:")
+    x = df['funding_rate'].rolling(8 * 60).sum().abs().values
+    # n, bins, patches = ax[1].hist(1e4 * x, bins=200, facecolor='#2ab0ff', edgecolor='#e0e0e0', linewidth=0.5, alpha=0.7, density=True)
+    # n = n.astype('int') # it MUST be integer
+    # ax[1].title('Open and Close 100 ETH', fontsize=12)
+    # ax[1].xlabel('Total slippage (bps)', fontsize=10)
+    # ax[1].ylabel('Frequency', fontsize=10)
+    # plt.show()
     x = np.nanquantile(df['funding_rate'].rolling(8 * 60).sum().abs().values, q)
     v = np.quantile(x, q)
     print("\n".join([f"{100*_q:.1f}%: {1e4 *_v: .4f} bps" for _q, _v in zip(q,v)]))
@@ -164,14 +184,29 @@ def plot_prices(ax, df):
     ax.xaxis.set_major_formatter(mdates.DateFormatter('%y-%m-%d'))
     
     
-def plot_trader_pnl(ax, df):
-    ax.plot(df['datetime'], df['trader_pnl'], 'k-', label="")
-    
-    ax.plot(df['datetime'], df['mark_price'], 'r:', label="mark price")
-    ax.set(xlabel="Time", ylabel=f"{INDEX}/{QUOTE}")
+def plot_pnl(ax, df):
+    # ax.plot(df['datetime'], df['trader_pnl_cc'], 'k-', label="")
+    perp_pnls = [x for x in df.columns if re.search('_pnl_cc', x) and not re.search('^perp', x)]
+    # print(perp_pnls)
+    color = iter(cm.rainbow(np.linspace(0, 1, len(perp_pnls))))
+    for p in perp_pnls:
+        c = next(color)
+        print(p)
+        ax.plot(df['datetime'], df[p], c=c, label=p)
+    ax.legend()
+    ax.set(xlabel="Time", ylabel=f"{COLL}")
     ax.grid(linestyle='--', linewidth=1)
     ax.xaxis.set_major_formatter(mdates.DateFormatter('%y-%m-%d'))
     
+def plot_earnings(ax, df):
+    ax.plot(df['datetime'], (df['staker_cash']), 'b-', label='Lp')
+    ax.plot(df['datetime'], df['protocol_earnings_vault'], 'k-', label="Protocol") 
+    ax.plot(df['datetime'], (df['df_cash']- df['df_target']), 'k:', label='DF excess')
+    ax.plot(df['datetime'], df['liquidator_earnings_vault'], 'g-', label='Liquidator')
+    ax.set(xlabel="Time", ylabel=f"{COLL}")
+    ax.grid(linestyle='--', linewidth=1)
+    ax.legend()
+    ax.xaxis.set_major_formatter(mdates.DateFormatter('%y-%m-%d'))
     
 def plot_analysis(df, file=None):
     print(f"Index: {INDEX}, Quote: {QUOTE}, Collateral: {COLL}")
@@ -179,7 +214,7 @@ def plot_analysis(df, file=None):
     ## First plot
     
     fig, axs = plt.subplots(3, 2, sharex=True)
-    mask = df["timestamp"] % 60 == 0
+    mask = df["timestamp"] % (60 * 60) == 0
    
     plot_price_premia(axs[0,0], df[mask])
     
@@ -202,66 +237,37 @@ def plot_analysis(df, file=None):
 
 
     #### Second plot ####
-    fig, axs = plt.subplots(3, 1, sharex=True)
+    fig, axs = plt.subplots(2, 2, sharex=True)
     # quote ccy
-    # axs[0].plot(df['datetime'][mask], df['arb_pnl'][mask], 'r-', label='Arb traders')
-    axs[0].plot(df['datetime'][mask], df['protocol_earnings_vault'][mask] * df['idx_s3'][mask], 'k-', label="Protocol") 
-    axs[0].plot(df['datetime'][mask], (df['df_cash'][mask]- df['df_target'][mask]) * df['idx_s3'][mask], 'k:', label='DF excess')
-    axs[0].plot(df['datetime'][mask], (df['staker_cash'][mask]) * df['idx_s3'][mask], 'b-', label='Liq provider')
-    axs[0].plot(df['datetime'][mask], df['liquidator_earnings_vault'][mask] * df['idx_s3'][mask], 'g-', label='Liquidator')
-    axs[0].set(xlabel="Time", ylabel=f"{QUOTE}")
-    axs[0].grid(linestyle='--', linewidth=1)
-    axs[0].legend()
-    axs[0].xaxis.set_major_formatter(mdates.DateFormatter('%y-%m-%d'))
-    # collateral ccy
-     # quote ccy
-    # axs[1].plot(df['datetime'][mask], df['arb_pnl'][mask]/df['idx_s3'][mask], 'r-', label='Arb traders')
-    axs[1].plot(df['datetime'][mask], df['protocol_earnings_vault'][mask], 'k-', label="Protocol") 
-    axs[1].plot(df['datetime'][mask], (df['df_cash'][mask]- df['df_target'][mask]), 'k:', label='DF excess')
-    axs[1].plot(df['datetime'][mask], (df['staker_cash'][mask]), 'b-', label='Liq provider')
-    axs[1].plot(df['datetime'][mask], df['liquidator_earnings_vault'][mask], 'g-', label='Liquidator')
-    axs[1].set(xlabel="Time", ylabel=f"{COLL}")
-    axs[1].grid(linestyle='--', linewidth=1)
-    axs[1].legend()
-    axs[1].xaxis.set_major_formatter(mdates.DateFormatter('%y-%m-%d'))
+    # axs[0,0].plot(df['datetime'][mask], df['protocol_earnings_vault'][mask] * df['idx_s3'][mask], 'k-', label="Protocol") 
+    # axs[0,0].plot(df['datetime'][mask], (df['df_cash'][mask]- df['df_target'][mask]) * df['idx_s3'][mask], 'k:', label='DF excess')
+    # axs[0,0].plot(df['datetime'][mask], (df['staker_cash'][mask]) * df['idx_s3'][mask], 'b-', label='Liq provider')
+    # axs[0,0].plot(df['datetime'][mask], df['liquidator_earnings_vault'][mask] * df['idx_s3'][mask], 'g-', label='Liquidator')
+    # axs[0,0].set(xlabel="Time", ylabel=f"{QUOTE}")
+    # axs[0,0].grid(linestyle='--', linewidth=1)
+    # axs[0,0].legend()
+    # axs[0,0].xaxis.set_major_formatter(mdates.DateFormatter('%y-%m-%d'))
+    axs[0,0].plot(df['datetime'][mask], 100 * df['lp_apy'][mask], 'k-', label='LP APY')
+    axs[0,0].set(xlabel="Time", ylabel=f"%")
+    axs[0,0].grid(linestyle='--', linewidth=1)
+    axs[0,0].legend()
+    axs[0,0].xaxis.set_major_formatter(mdates.DateFormatter('%y-%m-%d'))
     
-    plot_amm_funds(axs[2], df[mask])
+  
+    plot_earnings(axs[1,0], df[mask])
+    
+    plot_pnl(axs[0,1], df[mask])
+    
+    plot_amm_funds(axs[1,1], df[mask])
 
     fig = plt.gcf()
     fig.set_size_inches((12, 11), forward=False)
     if file is not None:
         fig.savefig(file[:-4] + '-2.png', dpi=500)
 
-    # #### Third plot ####
-    # fig, axs = plt.subplots(2, 1, sharex=True)
-    # # quote ccy
-    # # axs[0].plot(df['num_trades'][mask], df['arb_pnl'][mask], 'r-', label='Arb traders')
-    # axs[0].plot(df['num_trades'][mask], df['protocol_earnings_vault'][mask] * df['idx_s3'][mask], 'k-', label="Protocol") 
-    # axs[0].plot(df['num_trades'][mask], (df['df_cash'][mask]- df['df_target'][mask]) * df['idx_s3'][mask], 'k:', label='DF excess')
-    # axs[0].plot(df['num_trades'][mask], (df['staker_cash'][mask]) * df['idx_s3'][mask], 'b-', label='Liq provider')
-    # axs[0].plot(df['num_trades'][mask], df['liquidator_earnings_vault'][mask] * df['idx_s3'][mask], 'g-', label='Liquidator')
-    # axs[0].set(xlabel="Trades", ylabel=f"{QUOTE}")
-    # axs[0].grid(linestyle='--', linewidth=1)
-    # axs[0].legend()
-    # # axs[0].xaxis.set_major_formatter(mdates.DateFormatter('%y-%m-%d'))
-    # # collateral ccy
-    #  # quote ccy
-    # # axs[1].plot(df['num_trades'][mask], df['arb_pnl'][mask]/df['idx_s3'][mask], 'r-', label='Arb traders')
-    # axs[1].plot(df['num_trades'][mask], df['protocol_earnings_vault'][mask], 'k-', label="Protocol") 
-    # axs[1].plot(df['num_trades'][mask], (df['df_cash'][mask]- df['df_target'][mask]), 'k:', label='DF excess')
-    # axs[1].plot(df['num_trades'][mask], (df['staker_cash'][mask]), 'b-', label='Liq provider')
-    # axs[1].plot(df['num_trades'][mask], df['liquidator_earnings_vault'][mask], 'g-', label='Liquidator')
-    # axs[1].set(xlabel="Trades", ylabel=f"{COLL}")
-    # axs[1].grid(linestyle='--', linewidth=1)
-    # axs[1].legend()
-    # # axs[1].xaxis.set_major_formatter(mdates.DateFormatter('%y-%m-%d'))
-
-    # fig = plt.gcf()
-    # fig.set_size_inches((12, 11), forward=False)
-    # if file is not None:
-    #     fig.savefig(file[:-4] + '-3.png', dpi=500)
-
     plt.show()
+# %%
+
     # %%
 
 if __name__ == "__main__":

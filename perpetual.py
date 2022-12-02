@@ -679,7 +679,7 @@ class Perpetual:
         
     def trade(self, trader: 'Trader', amount_bc: float, is_close_only: bool):
         if trader.cash_cc <= 0:
-            print(f"Trade rejected: {self.symbol} {trader.__class__.__name__} does not have cash left: {trader.cash_cc}")
+            print(f"Trade rejected:  {trader.__class__.__name__} does not have cash left: {trader.cash_cc}")
             # can't trade without cash
             return None
         if np.abs(amount_bc) < self.params['fLotSizeBC']:
@@ -733,7 +733,7 @@ class Perpetual:
             if np.abs(amount_bc) > np.abs(max_trade_size) and not is_trying_to_exit:
                 action_msg = f"{'fully' if is_trying_to_exit else ''} close" if is_close_only else "open"
                 msg = f"{trader.__class__.__name__} was trying to {action_msg} a trade"
-                print(f"Trade rejected: trade size violation {np.abs(amount_bc):.4f} > {np.abs(max_trade_size):.4f} ({msg})")
+                print(f"Trade rejected: {self.symbol} trade size violation {np.abs(amount_bc):.4f} > {np.abs(max_trade_size):.4f} ({msg})")
                 return None
            
         # trade with AMM:
@@ -870,6 +870,9 @@ class Perpetual:
         # update average trade sizes for AMM pool and default fund
         # only account for opening trades
         if(not is_close):
+            # if self.symbol == 'ETHUSD-MATIC' and trader.position_bc > 100:
+            #     print(trader.__class__.__name__)
+            #     print(vars(trader))
             self.__update_exposure_ema(trader.position_bc)
         # at this point the trade was successful: gas fees are paid from the amm margin account
         self.transfer_cash_to_margin(-GAS_FEE)

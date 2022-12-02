@@ -115,20 +115,20 @@ SIM_PARAMS['num_trades_per_day'] = 2
 SIM_PARAMS['prob_best_tier'] = 0 # not used when simulating zero fees
 
 # number of liquidity providers
-SIM_PARAMS['num_stakers'] = 25
+SIM_PARAMS['num_stakers'] = 10
 # total cash brought in by each LP (randomized)
-SIM_PARAMS['cash_per_staker'] = 4_000 # if num=25, then use 20k for 500k, 8k for 200k, 6k for 150k, 4k for 100k, 2k for 50k
+SIM_PARAMS['cash_per_staker'] = 10_000 # if num=25, then use 20k for 500k, 8k for 200k, 6k for 150k, 4k for 100k, 2k for 50k
 # how often do they deposit per month, in average (randomized)
 SIM_PARAMS['monthly_stakes'] = 1.5
-# they withdraw after exactly 1.5 months (not randomized)
-SIM_PARAMS['holding_period_months'] = 1.5
+# they withdraw after this number of months (randomized)
+SIM_PARAMS['holding_period_months'] = 1
 
 # this is just for logging on screen
 SIM_PARAMS['log_every'] = 1_000
 
 
 # Parallelize run?
-RUN_PARALLEL = False
+RUN_PARALLEL = True
 
 def main():
     all_runs_t0 = datetime.now()
@@ -136,21 +136,21 @@ def main():
     # seed for cash samples, random agent trading order, random agent preferences
     seeds = [
         42, 
-        # 31415,
+        31415,
     ]
 
     # simulation period
     simulation_horizons = [
-        (datetime(2022, 5, 15, 0, 0, tzinfo=timezone.utc), datetime(2022, 8, 16, 0, 0, tzinfo=timezone.utc)), 
-        # (datetime(2022, 7, 20, 0, 0, tzinfo=timezone.utc), datetime(2022, 10, 21, 0, 0, tzinfo=timezone.utc)), 
+        # (datetime(2022, 5, 15, 0, 0, tzinfo=timezone.utc), datetime(2022, 8, 16, 0, 0, tzinfo=timezone.utc)), 
+        (datetime(2022, 7, 20, 0, 0, tzinfo=timezone.utc), datetime(2022, 10, 21, 0, 0, tzinfo=timezone.utc)), 
         # (datetime(2022, 6, 18, 0, 0, tzinfo=timezone.utc), datetime(2022, 9, 20, 0, 0, tzinfo=timezone.utc)),
     ]
 
     # given that a trader is about to open a position, with what probability will it be a long one?
     long_probs = [
         0.40,
-        # 0.50,
-        # 0.60,
+        0.50,
+        0.60,
         # 0.95,
     ]
 
@@ -552,7 +552,7 @@ def simulate(sim_input):
             
             print(msg)
             
-            # stats
+            # PnL Stats
             if t > 0:
                 pnl_abs_cc = [f"{name}: {amm.earnings[i]: .3f}" for i, name in enumerate(SYMBOLS)]
                 print(f"Cumulative pool PnL (in {COLL}): {sum(amm.earnings.values()):.2f}")

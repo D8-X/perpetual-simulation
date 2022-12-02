@@ -19,8 +19,8 @@ class NoiseTrader(Trader):
             self.prob_trade = np.min((1, daily_trades / (60 * 24)))
         # fix a probability that the trader is long
         self.prob_long = prob_long
-        # holding period: 15min-12h
-        self.holding_period_blocks = 60*np.random.uniform(1/4, 12)
+        # holding period: 15min-48h
+        self.holding_period_blocks = 60*np.random.uniform(1/4, 48)
         self.time_last_trade = -self.holding_period_blocks
         self.time_last_pnl_check = -self.holding_period_blocks
         # slippage tolerance: 0.5%-2%

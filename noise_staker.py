@@ -10,7 +10,7 @@ class NoiseStaker(Staker):
         assert(monthly_stakes > 0 and holding_period_months > 0)
         one_month_in_seconds = (60 * 60 * 24 * 30)
         self.prob_stake_per_block = np.min((1, monthly_stakes / one_month_in_seconds * self.amm.params["block_time_sec"]))
-        self.holding_period_seconds = holding_period_months * one_month_in_seconds 
+        self.holding_period_seconds = np.random.uniform(2 * holding_period_months) * one_month_in_seconds 
         self.time_last_stake = -self.holding_period_seconds
 
         # to compute pnl
