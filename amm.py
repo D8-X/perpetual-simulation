@@ -150,7 +150,7 @@ class AMM:
         perpetual = self.perpetual_list[perp_idx]
         # try to trade
         px = perpetual.trade(trader, amount_bc, is_close_only)
-        if px is None:
+        if not px:
             # trade failed
             return None
         # trade was successful, keep track of trader status

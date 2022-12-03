@@ -49,8 +49,9 @@ class NoiseTrader(Trader):
 
         perp = self.amm.get_perpetual(self.perp_idx)
 
-        
+
         if self.position_bc != 0:
+            assert(self.cash_to_open_cc > 0)
             # randmly close if it's been long enough
             if np.random.uniform(0, 1) < self.prob_trade and self.amm.current_time - self.time_last_trade > self.holding_period_blocks:
                 # print("Noise trader randomly closes")
@@ -103,9 +104,10 @@ class NoiseTrader(Trader):
     def trade(self, dPos, is_close):
         cash_before = self.cash_cc
         px = super().trade(dPos, is_close)
-        if px is not None:
+        if px:
             self.time_last_trade = self.amm.current_time
-            self.cash_to_open_cc = cash_before
+            if not is_close:
+                self.cash_to_open_cc = cash_before
             self.time_last_pnl_check = self.amm.current_time
         return px
        

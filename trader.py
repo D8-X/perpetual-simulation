@@ -72,10 +72,8 @@ class Trader(ABC):
 
     def trade(self, dPos, is_close):
         c0 = self.cash_cc
-        try:
-            px = self.amm.trade_with_amm(self, dPos, is_close)
-        except:
-            px = None
+        px = self.amm.trade_with_amm(self, dPos, is_close)
+        
         if px:
             self.pnl_cc += self.cash_cc - c0
         return px

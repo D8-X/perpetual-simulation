@@ -115,20 +115,20 @@ SIM_PARAMS['num_trades_per_day'] = 2
 SIM_PARAMS['prob_best_tier'] = 0 # not used when simulating zero fees
 
 # number of liquidity providers
-SIM_PARAMS['num_stakers'] = 10
+SIM_PARAMS['num_stakers'] = 25
 # total cash brought in by each LP (randomized)
-SIM_PARAMS['cash_per_staker'] = 10_000 # if num=25, then use 20k for 500k, 8k for 200k, 6k for 150k, 4k for 100k, 2k for 50k
+SIM_PARAMS['cash_per_staker'] = 4_000 # if num=25, then use 20k for 500k, 8k for 200k, 6k for 150k, 4k for 100k, 2k for 50k
 # how often do they deposit per month, in average (randomized)
 SIM_PARAMS['monthly_stakes'] = 1.5
 # they withdraw after this number of months (randomized)
 SIM_PARAMS['holding_period_months'] = 1
 
 # this is just for logging on screen
-SIM_PARAMS['log_every'] = 1_000
+SIM_PARAMS['log_every'] = 2_000
 
 
 # Parallelize run?
-RUN_PARALLEL = True
+RUN_PARALLEL = False
 
 def main():
     all_runs_t0 = datetime.now()
@@ -137,20 +137,21 @@ def main():
     seeds = [
         42, 
         31415,
+        # 66260,
     ]
 
     # simulation period
     simulation_horizons = [
         # (datetime(2022, 5, 15, 0, 0, tzinfo=timezone.utc), datetime(2022, 8, 16, 0, 0, tzinfo=timezone.utc)), 
-        (datetime(2022, 7, 20, 0, 0, tzinfo=timezone.utc), datetime(2022, 10, 21, 0, 0, tzinfo=timezone.utc)), 
+        (datetime(2022, 7, 1, 0, 0, tzinfo=timezone.utc), datetime(2022, 10, 21, 0, 0, tzinfo=timezone.utc)), 
         # (datetime(2022, 6, 18, 0, 0, tzinfo=timezone.utc), datetime(2022, 9, 20, 0, 0, tzinfo=timezone.utc)),
     ]
 
     # given that a trader is about to open a position, with what probability will it be a long one?
     long_probs = [
-        0.40,
-        0.50,
-        0.60,
+        0.36,
+        0.51,
+        0.64,
         # 0.95,
     ]
 
@@ -168,7 +169,7 @@ def main():
     usds_per_trader = [
         # 800,
         1_000,
-        # 1_300,
+        # 3_000,
     ]
 
     run_configs = itertools.product(seeds, simulation_horizons, long_probs, initial_investments, usds_per_trader)
@@ -555,7 +556,7 @@ def simulate(sim_input):
             # PnL Stats
             if t > 0:
                 pnl_abs_cc = [f"{name}: {amm.earnings[i]: .3f}" for i, name in enumerate(SYMBOLS)]
-                print(f"Cumulative pool PnL (in {COLL}): {sum(amm.earnings.values()):.2f}")
+                print(f"Cumulative pool PnL (in {COLL}): {sum(amm.earnings.values()):.2f} {COLL}, {100 *(sum(amm.earnings.values()) / sum(amm.get_perpetual(perps[i]).total_volume_cc for i in range(len(SYMBOLS)))):.3f} %")
                 print(f"Cumulative PnL by perp (in {COLL}):\t" + "\t".join(pnl_abs_cc))
                 pnl_rel = [
                     f"{name}: {100 * amm.earnings[i] * S3 / amm.get_perpetual(perps[i]).total_volume_qc: .3f}" 

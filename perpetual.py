@@ -129,6 +129,8 @@ class Perpetual:
             return
         fxb2c = self.get_base_to_collateral_conversion(False)
         coupon = np.sign(trader.position_bc) * coupon_abs * fxb2c
+        if coupon > trader.cash_cc:
+            coupon = trader.cash_cc
         trader.cash_cc -= coupon
         self.transfer_cash_to_margin(coupon)
 
@@ -347,8 +349,11 @@ class Perpetual:
         self.my_amm.increment_pricing_staker_cash()
         amt_df = 0
 
-        if rebalance_amnt_cc > 0:
+        if rebalance_amnt_cc > 0 and self.amm_trader.cash_cc > 0:
             # transfer From AMM Margin To Pool
+            if rebalance_amnt_cc > self.amm_trader.cash_cc:
+                # can't transfer more than what's available
+                rebalance_amnt_cc = self.amm_trader.cash_cc
             (amount_staker, amount_amm) = self.__split_amount(rebalance_amnt_cc, False)
             self.amm_trader.cash_cc = self.amm_trader.cash_cc - rebalance_amnt_cc
             assert(amount_staker == 0 or self.my_amm.staker_cash_cc > 0)
@@ -384,6 +389,8 @@ class Perpetual:
             # update margin
             feasible_mgn = amt_df + amt
             self.amm_trader.cash_cc += feasible_mgn
+            if self.amm_trader.cash_cc < 0:
+                print(self.__dict__)
         self.rebalance_amm()
         self.update_mark_price()
         # rebalance another perp randomly
@@ -528,7 +535,9 @@ class Perpetual:
         Args:
             cash (float): [amount to be distributed]
         """
-        assert(cash > 0)
+        assert(cash >= 0)
+        if cash == 0:
+            return
         amm_gap = self.amm_pool_target_size - self.amm_pool_cash_cc
 
         if amm_gap > cash:
@@ -717,10 +726,12 @@ class Perpetual:
             return None
         self.rebalance_perpetual()
         px = self.get_price(amount_bc)
-        assert(px > 0)
+        if px <= 0:
+            print(f"Trade rejected: {self.symbol} {trader.__class__.__name__} price for amount {amount_bc} is undefined")
         
         is_opening = (new_position_bc > trader.position_bc and trader.position_bc >= 0) or (new_position_bc < trader.position_bc and trader.position_bc <= 0)
         if is_opening and not self.is_new_position_margin_safe(trader, amount_bc, px):
+            print(f"Trade rejected: {self.symbol} {trader.__class__.__name__} not enough margin")
             return None
 
         k_star = self.get_Kstar()
@@ -900,6 +911,7 @@ class Perpetual:
         trader.locked_in_qc = trader.locked_in_qc + delta_locked_value
         trader.position_bc = trader.position_bc + amount_bc
         trader.cash_cc = trader.cash_cc + delta_cash
+        assert(not trader is AMMTrader or trader.cash_cc >= 0)
         # adjust open interest
         delta_oi = 0
         if old_pos > 0:
