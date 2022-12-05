@@ -1,4 +1,5 @@
 {
+  "poolName": "MATIC",
   "fInitialMarginRate": 0.05,
   "fMaintenanceMarginRate": 0.03,
   "fTreasuryFeeRate": 0.000075,
@@ -10,9 +11,9 @@
   "fLotSizeBC": 0.001,
   "fFundingRateClamp": 0.0005,
   "fMarkPriceEMALambda": 0.7,
-  "fSigma2": 0.08,
+  "fSigma2": 0.09,
   "fSigma3": 0.12,
-  "fRho23": 0.8,
+  "fRho23": 0.7,
   "eCollateralCurrency": "QUANTO",
   "fStressReturnS2": [
     -0.20,
@@ -27,15 +28,12 @@
     0.9995,
     0.5
   ],
-  "fAMMTargetDD": [
-    -3.540084,
-    -3.431614
-  ],
-  "fAMMMinSizeCC": 62000,
+  "fAMMTargetDD": [-3.290526728, -3.035672366],
+  "fAMMMinSizeCC": 102000,
   "fMinimalTraderExposureEMA": 90,
   "fMinimalAMMExposureEMA": 108,
   "fMaximalTradeSizeBumpUp": 1.2,
   "baseCurrency": "ETH",
   "quoteCurrency": "USD",
-  "collateralCurrency": "MATIC"
+  "collateralCurrency": "MATC"
 }

@@ -23,6 +23,8 @@ class Staker(ABC):
     def exit(self):
         if self.share_tokens > 0:
             self.withdraw(self.share_tokens)
+        
+        self.amm.record_apy(self.get_apy())
     
     def get_apy(self):
         if not self.has_staked or self.deposit_cash_cc <= 0:
@@ -33,7 +35,7 @@ class Staker(ABC):
         pos_value_cc = self.get_position_value_cc()
         if np.isnan(pos_value_cc): 
             return np.nan
-        if pos_value_cc < 1:
+        if pos_value_cc < 0.0001:
             return -1
         N = (365 * 24 * 60 * 60) / delta_t
         r_nom = self.get_position_value_cc() / self.deposit_cash_cc - 1
@@ -46,13 +48,8 @@ class Staker(ABC):
     # apy = c_1year / c_0 - 1 = e^{1 year in seconds  * 1/delta_seconds * ln(c_t / c_0)} - 1
 
     def get_position_value_cc(self):
-        if self.share_tokens > 0 and (self.share_tokens / self.amm.share_token_supply) > 0.001:
-            return np.nan
-        else:
-            return self.cash_cc
-        
         value = self.cash_cc
-        if self.share_tokens > 0 and self.amm.share_token_supply > 1:
+        if self.share_tokens > 1e-12 and self.amm.share_token_supply > 0.0001:
             value += (self.share_tokens / self.amm.share_token_supply) * self.amm.staker_cash_cc
         return value
 

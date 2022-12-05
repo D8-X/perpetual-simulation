@@ -98,8 +98,8 @@ class Perpetual:
         self.total_volume_qc = 0 # notional traded in quote currency
         self.total_volume_cc = 0 # notional traded in quote currency
         self.open_interest = 0
-        self.amm_pool_target_size = params['fAMMMinSizeCC']
-        self.default_fund_target_size = params['fAMMMinSizeCC']
+        self.amm_pool_target_size = self.amm_pool_cash_cc
+        self.default_fund_target_size = self.amm_pool_cash_cc
         self.current_AMM_exposure_EMA = np.array([1.0, 1.0]) * params['fMinimalAMMExposureEMA']
         self.current_trader_exposure_EMA = params['fMinimalTraderExposureEMA']
         self.current_locked_in_value_EMA = [-params['fMinimalAMMExposureEMA'], params['fMinimalAMMExposureEMA']]
@@ -215,10 +215,15 @@ class Perpetual:
         max_signed_trade_amount = np.sign(max_position - position) * np.min(
             (np.abs(max_position - position), self.get_absolute_max_trade_size()))
         k_star = self.get_Kstar()
+        # if not exceeds_cap and (
+        #     (
+        #         (max_signed_trade_amount > 0 and 2*k_star > max_signed_trade_amount) or 
+        #         (max_signed_trade_amount < 0 and 2*k_star < max_signed_trade_amount))
+        # ):
         if not exceeds_cap and (
             (
-                (max_signed_trade_amount > 0 and 2*k_star > max_signed_trade_amount) or 
-                (max_signed_trade_amount < 0 and 2*k_star < max_signed_trade_amount))
+                (max_signed_trade_amount > 0 and k_star >= max_signed_trade_amount) or 
+                (max_signed_trade_amount < 0 and k_star <= max_signed_trade_amount))
         ):
             max_signed_trade_amount = 2*k_star   
         res = self.my_amm.shrink_to_lot(max_signed_trade_amount, self.params['fLotSizeBC'])
@@ -256,7 +261,7 @@ class Perpetual:
         
         staker_cash_cc = self.get_pricing_staked_cash_for_perp()
         # combine with protocol owned cash
-        pricing_cash_cc = self.amm_pool_cash_cc + staker_cash_cc
+        pricing_cash_cc = self.amm_pool_cash_cc + staker_cash_cc + self.amm_trader.cash_cc
         # assign according to collateral type
         if self.collateral_currency is CollateralCurrency.BASE:
             M1, M3 = 0, 0
@@ -291,11 +296,12 @@ class Perpetual:
         return k_star
 
     def get_funding_rate(self):
+        # return 0
         time_idx = np.min((self.current_time, self.premium_rate.shape[0] - 1))
         premium_rate = self.premium_rate[time_idx]
         c = self.params['fFundingRateClamp']
-        rate = np.max((premium_rate, c)) + \
-            np.min((premium_rate, -c)) + np.sign(-self.amm_trader.position_bc)*0.0001
+        K2 = -self.amm_trader.position_bc
+        rate = np.max((premium_rate, c)) + np.min((premium_rate, -c)) + np.sign(K2)*0.0001
         rate = rate * self.glbl_params['block_time_sec']/(8*60*60)
         # max_rate = (self.params['fInitialMarginRate']-
         #             self.params['fMaintenanceMarginRate'])*0.9
@@ -349,11 +355,11 @@ class Perpetual:
         self.my_amm.increment_pricing_staker_cash()
         amt_df = 0
 
-        if rebalance_amnt_cc > 0 and self.amm_trader.cash_cc > 0:
+        if rebalance_amnt_cc > 0: # and self.amm_trader.cash_cc > 0:
             # transfer From AMM Margin To Pool
-            if rebalance_amnt_cc > self.amm_trader.cash_cc:
-                # can't transfer more than what's available
-                rebalance_amnt_cc = self.amm_trader.cash_cc
+            # if rebalance_amnt_cc > self.amm_trader.cash_cc:
+            #     # can't transfer more than what's available
+            #     rebalance_amnt_cc = self.amm_trader.cash_cc
             (amount_staker, amount_amm) = self.__split_amount(rebalance_amnt_cc, False)
             self.amm_trader.cash_cc = self.amm_trader.cash_cc - rebalance_amnt_cc
             assert(amount_staker == 0 or self.my_amm.staker_cash_cc > 0)
@@ -389,8 +395,8 @@ class Perpetual:
             # update margin
             feasible_mgn = amt_df + amt
             self.amm_trader.cash_cc += feasible_mgn
-            if self.amm_trader.cash_cc < 0:
-                print(self.__dict__)
+            # if self.amm_trader.cash_cc < 0:
+            #     print(self.__dict__)
         self.rebalance_amm()
         self.update_mark_price()
         # rebalance another perp randomly
@@ -433,7 +439,10 @@ class Perpetual:
         # draw funds in relation to available size from default fund
         # If default fund is funded at rate r we withdraw at most min(1, r%) from it
         gap = 0.75*(stress_target_size - self.amm_pool_cash_cc)
-        assert(gap > 0)
+        # assert(gap > 0)
+        if gap <= 0:
+            return
+        
         gap_fill_df = np.min(
             (gap, 0.75 * self.my_amm.default_fund_cash_cc)
         )
@@ -509,8 +518,8 @@ class Perpetual:
 
         # account for staker cash
         staker_cash_cc = self.get_pricing_staked_cash_for_perp()
-        # want amm fund + staker_cash >= target, so we decrease target by staker cash
-        size_0 -= staker_cash_cc
+        # M =  amm fund + amm margin + staker_cash >= target, and this target is for amm fund, so:
+        size_0 = size_0 - staker_cash_cc - self.amm_trader.cash_cc
         # target should be non-negative
         size_0 = np.max((0, size_0))
         # size_0 = np.max((size_0, self.params['fAMMMinSizeCC']))
@@ -798,7 +807,7 @@ class Perpetual:
                 df_max_withdrawal = -gap_df
                 amm_pool_contribution = np.min((gap_amm_after_fee, df_max_withdrawal))
 
-        assert(self.my_amm.default_fund_cash_cc >= 0)
+        # assert(self.my_amm.default_fund_cash_cc >= 0)
         # distribute amounts
         trader.cash_cc = trader.cash_cc - total_fee
         assert(staker_fee >= 0)
@@ -911,7 +920,7 @@ class Perpetual:
         trader.locked_in_qc = trader.locked_in_qc + delta_locked_value
         trader.position_bc = trader.position_bc + amount_bc
         trader.cash_cc = trader.cash_cc + delta_cash
-        assert(not trader is AMMTrader or trader.cash_cc >= 0)
+        # assert(not trader is AMMTrader or trader.cash_cc >= 0)
         # adjust open interest
         delta_oi = 0
         if old_pos > 0:

@@ -15,10 +15,10 @@ class NoiseStaker(Staker):
 
         # to compute pnl
         self.initial_stake = 0
-        # stop loss at somewhere between 5% and 20% loss
-        self.stop_loss = np.random.uniform(0.05, 0.20)
-        # take profit at somewhere between 10% and 40% profit
-        self.take_profit = np.random.uniform(0.05, 0.40)
+        # stop loss at somewhere between 15% and 30% loss
+        self.stop_loss = np.random.uniform(0.15, 0.30)
+        # take profit at somewhere between 20% and 60% profit
+        self.take_profit = np.random.uniform(0.20, 0.60)
 
         
         

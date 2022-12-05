@@ -1,4 +1,5 @@
 {
+  "poolName": "MATIC",
   "fInitialMarginRate": 0.05,
   "fMaintenanceMarginRate": 0.03,
   "fTreasuryFeeRate": 0.000075,
@@ -27,15 +28,12 @@
     0.9995,
     0.5
   ],
-  "fAMMTargetDD": [
-    -3.540084,
-    -3.431614
-  ],
-  "fAMMMinSizeCC": 74000,
+  "fAMMTargetDD": [-3.290526728, -3.035672366],
+  "fAMMMinSizeCC": 122000,
   "fMinimalTraderExposureEMA": 6,
   "fMinimalAMMExposureEMA": 9,
   "fMaximalTradeSizeBumpUp": 1.5,
   "baseCurrency": "BTC",
   "quoteCurrency": "USD",
-  "collateralCurrency": "MATIC"
+  "collateralCurrency": "MATC"
 }

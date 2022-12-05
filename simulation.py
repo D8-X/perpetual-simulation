@@ -128,29 +128,32 @@ SIM_PARAMS['log_every'] = 2_000
 
 
 # Parallelize run?
-RUN_PARALLEL = False
+RUN_PARALLEL = True
 
 def main():
     all_runs_t0 = datetime.now()
 
     # seed for cash samples, random agent trading order, random agent preferences
     seeds = [
-        42, 
-        31415,
+        123,
+        345,
+        # 567,
+        # 42, 
+        # 31415,
         # 66260,
     ]
 
     # simulation period
     simulation_horizons = [
-        # (datetime(2022, 5, 15, 0, 0, tzinfo=timezone.utc), datetime(2022, 8, 16, 0, 0, tzinfo=timezone.utc)), 
-        (datetime(2022, 7, 1, 0, 0, tzinfo=timezone.utc), datetime(2022, 10, 21, 0, 0, tzinfo=timezone.utc)), 
-        # (datetime(2022, 6, 18, 0, 0, tzinfo=timezone.utc), datetime(2022, 9, 20, 0, 0, tzinfo=timezone.utc)),
+        # (datetime(2022, 5, 15, 0, 0, tzinfo=timezone.utc), datetime(2022, 10, 16, 0, 0, tzinfo=timezone.utc)),
+        # (datetime(2022, 6, 17, 0, 0, tzinfo=timezone.utc), datetime(2022, 10, 18, 0, 0, tzinfo=timezone.utc)),
+        (datetime(2022, 7, 19, 0, 0, tzinfo=timezone.utc), datetime(2022, 10, 20, 0, 0, tzinfo=timezone.utc)), 
     ]
 
     # given that a trader is about to open a position, with what probability will it be a long one?
     long_probs = [
-        0.36,
-        0.51,
+        0.38,
+        0.52,
         0.64,
         # 0.95,
     ]
@@ -167,9 +170,13 @@ def main():
     # exact cash amounts for each trader are randomized, this is an average
     # distribution is fat tailed to the right (i.e. whales exist but are rare)
     usds_per_trader = [
-        # 800,
         1_000,
-        # 3_000,
+        1_200,
+        # 1_600,
+        
+        # 1_500,
+        # 2_000,
+        # 3_500,
     ]
 
     run_configs = itertools.product(seeds, simulation_horizons, long_probs, initial_investments, usds_per_trader)
@@ -236,10 +243,10 @@ def report_stats(amm_state, sim):
         "Funds_Init_CC": amm_state.at[0, "df_cash"] + amm_state.at[0, 'amm_cash'] + amm_state.at[0, 'pool_margin'], 
         "Funds_Final_CC": amm_state.at[n-1, "df_cash"] + amm_state.at[n-1, 'amm_cash'] + amm_state.at[n-1, 'pool_margin'], 
         "DF_Excess": -amm_state.at[n-1, "df_cash_to_target"], 
-        "LP_Init_CC": amm_state.at[0, "staker_cash"], 
-        "LP_Final_CC": amm_state.at[n-1, "staker_cash"],
-        "LP_Init_QC": amm_state.at[0, "staker_cash"] * amm_state.at[0, "idx_s3"], 
-        "LP_Final_QC": amm_state.at[n-1, "staker_cash"] * amm_state.at[n-1, "idx_s3"], 
+        # "LP_Init_CC": amm_state.at[0, "staker_cash"], 
+        # "LP_Final_CC": amm_state.at[n-1, "staker_cash"],
+        # "LP_Init_QC": amm_state.at[0, "staker_cash"] * amm_state.at[0, "idx_s3"], 
+        # "LP_Final_QC": amm_state.at[n-1, "staker_cash"] * amm_state.at[n-1, "idx_s3"], 
         "Volume_QC": amm_state.at[n-1, "total_volume_qc"],
         "Volume_CC": amm_state.at[n-1, "total_volume_cc"],
     }
@@ -440,9 +447,9 @@ def simulate(sim_input):
             
             # this perpetual's status
             do_print = (
-                t % monitoring_period == 0  or
-                amm.get_default_fund_gap_to_target_ratio() < 0.02 or
-                np.abs(perp.get_mark_price() / perp.get_index_price() - 1) > 0.05
+                t % monitoring_period == 0  #or
+                # amm.get_default_fund_gap_to_target_ratio() < 0.02 or
+                # np.abs(perp.get_mark_price() / perp.get_index_price() - 1) > 0.05
             )
                 
             if do_print:
@@ -458,10 +465,10 @@ def simulate(sim_input):
                 trade_size_ema = perp.current_trader_exposure_EMA
                 trades_vec = [
                     -perp.params['fMaximalTradeSizeBumpUp'] * trade_size_ema, # largest short not considering k*
-                    -0.85 * trade_size_ema, # a typical short, ema is biased up
-                    -perp.min_num_lots_per_pos * perp.params['fLotSizeBC'], # smallest short
-                    perp.min_num_lots_per_pos * perp.params['fLotSizeBC'], # smallest long
-                    0.85 * trade_size_ema, # a typical long, ema is biased up
+                    -trade_size_ema, # a typical short, ema is biased up
+                    # -perp.min_num_lots_per_pos * perp.params['fLotSizeBC'], # smallest short
+                    # perp.min_num_lots_per_pos * perp.params['fLotSizeBC'], # smallest long
+                    trade_size_ema, # a typical long, ema is biased up
                     perp.params['fMaximalTradeSizeBumpUp']  * trade_size_ema, # largest long not considering k*
                 ]
                 slippage_summary = " ".join([f"{100 * (perp.get_price(k) - px0)/px0: .3f}({k: .3f})" for k in trades_vec])
@@ -472,8 +479,10 @@ def simulate(sim_input):
                 print(
                     f"{symbol} " \
                     + premium_summary + price_summary + funding_summary \
+                    + f"K2={-perp.amm_trader.position_bc:.2f} L1={-perp.amm_trader.locked_in_qc:.1f} cash={perp.amm_trader.cash_cc:.1f} "\
                     + f"traders: {perp.get_num_active_traders()}/{total_num_traders[symbol]}, ema={trade_size_ema:.1f}"
                 )
+                
             
             
             
@@ -1061,7 +1070,7 @@ def record_amm_state(t, state, amm, stakers, traders):
         amm.get_amm_pools_gap_to_target() + amm_cash,
         amm.get_default_fund_gap_to_target(),
         sum(t.pnl_cc for t in traders if t.position_bc != 0),
-        np.nanmean([s.get_apy() for s in stakers if s.has_staked])
+        np.nanmean(amm.lp_cc_apy)
     ]
     new_state.extend([amm.earnings[i] for i, name in enumerate(SYMBOLS)])
     state[t,:] = new_state

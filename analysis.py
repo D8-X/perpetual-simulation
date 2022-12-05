@@ -11,9 +11,9 @@ from simulation import load_perp_params
 COLL = 'MATIC'
 QUOTE = 'USD'
 
-FILENAME = 'results/res107-0-ETHUSDMATIC_20221020--8985315591111932502.csv'
+FILENAME = 'results/res129-0-ETHUSDMATIC_20221017--1541040943975829946.csv'
 
-perpsymbol = re.search("-[A-Z]+_", FILENAME).group(0)[1:-1] 
+perpsymbol = re.search("-[A-Z]+_", FILENAME).group(0)[1:-1]
 INDEX = perpsymbol[:(len(perpsymbol) - len(QUOTE + COLL))]
 
 def main():
@@ -54,7 +54,7 @@ def main():
     q = [0.01, 0.05, 0.25, 0.5, 0.6, 0.7, 0.8, 0.9, 0.95]
     v = np.quantile(x, q)
     print("\n".join([f"{100*_q:.1f}%: {1e4 *_v: .4f} bps" for _q, _v in zip(q,v)]))
-    print(f"mean +- stddev: {np.mean(1e4 * x)} +- {np.std(1e4 * x)} (bps)")
+    print(f"mean +- stddev: {np.nanmean(1e4 * x)} +- {np.nanstd(1e4 * x)} (bps)")
     
     
     # fig, ax = plt.subplots(2, 1, sharex=True)    
@@ -97,39 +97,50 @@ def plot_amm_funds(ax, df):
     
     ax.plot(df['datetime'], df['df_cash'] + df['amm_cash'] + df['pool_margin'], 'g-', label='Protocol')
 
+    ax.grid(linestyle='--', linewidth=1)
     ax.set(xlabel="Time", ylabel=COLL)
     ax.xaxis.set_major_formatter(mdates.DateFormatter('%y-%m-%d'))
+    
+    box = ax.get_position()
+    ax.set_position([box.x0, box.y0, box.width * 0.8, box.height])
+    ax.legend(loc='center left', bbox_to_anchor=(1, 0.5))
 
-    ax.legend()
-    ax.grid(linestyle='--', linewidth=1)
 
 def plot_perp_funds(ax, df):
     # ax.plot(df['datetime'], df['perp_amm_target'], 'k:', label='AMM target', alpha=0.5)
-    ax.plot(df['datetime'], df['perp_amm_target_baseline'], 'k:', alpha=0.5, label='AMM target')
+    # ax.plot(df['datetime'], df['perp_amm_target_baseline'], 'k:', alpha=0.5, label='AMM target')
+    ax.plot(df['datetime'], df['perp_amm_target_baseline'] + df['perp_pricing_staked_cash'] + df['perp_margin'], 'k:', alpha=0.5, label='Target capital')
     ax.plot(df['datetime'], df['perp_amm_target_stress'], 'k:', alpha=0.5)
-    ax.plot(df['datetime'], df['perp_amm_cash'], 'b-', label='AMM fund')
+    ax.plot(df['datetime'], df['perp_amm_cash'], 'b-', label='AMM pool')
 
     ax.plot(df['datetime'], df['perp_pricing_staked_cash'], 'y-', label='External LP')
     
-    ax.plot(df['datetime'], df['perp_amm_cash'] + df['perp_pricing_staked_cash'], 'g-', label='Perp capital')
+    ax.plot(df['datetime'], df['perp_amm_cash'] + df['perp_pricing_staked_cash'] + df['perp_margin'], 'g-', label='Total capital')
 
-    ax.plot(df['datetime'], df['perp_margin'], '-', color="purple", label='Perp AMM margin')
+    ax.plot(df['datetime'], df['perp_margin'], '-', color="purple", label='AMM margin')
 
     ax.set(xlabel="Time", ylabel=COLL)
     ax.xaxis.set_major_formatter(mdates.DateFormatter('%y-%m-%d'))
 
-    ax.legend()
+    # ax.legend()
+    box = ax.get_position()
+    ax.set_position([box.x0, box.y0, box.width * 0.8, box.height])
+    ax.legend(loc='center left', bbox_to_anchor=(1, 0.5))
     ax.grid(linestyle='--', linewidth=1)
 
 def plot_price_premia(ax, df):
     if df['cex_price_rel'].abs().max() > 0:
-        ax.plot(df['datetime'], df['cex_price_rel']*1e4,  'k-', label='cex')
-    ax.plot(df['datetime'], df['mid_price_rel']*1e4, 'r-', label='Mid')
-    ax.plot(df['datetime'], df['mark_price_rel']*1e4,  'y:', label='Mark')
+        ax.plot(df['datetime'], df['cex_price_rel']*1e4,  'k-', label='CEX mark-premium')
+    ax.plot(df['datetime'], df['mid_price_rel']*1e4, 'r-', label='DEX mid-premium')
+    ax.plot(df['datetime'], df['mark_price_rel']*1e4,  'y:', label='DEX mark-premim')
+    ax.plot(df['datetime'], df['funding_rate'].rolling(8 * 60).sum()*1e4, 'g-', label='DEX funding rate (8h accrued)')
 
-    ax.set(xlabel="Time", ylabel="premium over index (bps)")
+    ax.set(xlabel="Time", ylabel="Basis Points")
     ax.grid(linestyle='--', linewidth=1)
     ax.legend()
+    # box = ax.get_position()
+    # ax.set_position([box.x0, box.y0, box.width * 0.8, box.height])
+    # ax.legend(loc='center left', bbox_to_anchor=(1, 0.5))
     ax.xaxis.set_major_formatter(mdates.DateFormatter('%y-%m-%d'))
 
 def plot_perp_slippage(ax, df):
@@ -149,16 +160,22 @@ def plot_perp_slippage(ax, df):
     ax.set(xlabel="Time", ylabel="slippage from mid price (bps)")
 
     ax.legend()
+    # box = ax.get_position()
+    # ax.set_position([box.x0, box.y0, box.width * 0.8, box.height])
+    # ax.legend(loc='center left', bbox_to_anchor=(1, 0.5))
     ax.grid(linestyle='--', linewidth=1)
 
 def plot_pos_sizes(ax, df):
     ax.plot(df['datetime'], df['max_long_trade'], 'r', label="max long")
     ax.plot(df['datetime'], df['max_short_trade'], 'g', label="max short")
-    ax.plot(df['datetime'], df['current_trader_exposure_EMA'], 'k:', label="EMA (long)")
-    ax.plot(df['datetime'], -df['current_trader_exposure_EMA'], 'k:', label="EMA (short)")
+    ax.plot(df['datetime'], df['current_trader_exposure_EMA'], 'k:', label="EMA")
+    ax.plot(df['datetime'], -df['current_trader_exposure_EMA'], 'k:')
 
     #axs[1,0].set_xticks(df['num_trades'][mask])
     ax.legend()
+    # box = ax.get_position()
+    # ax.set_position([box.x0, box.y0, box.width * 0.8, box.height])
+    # ax.legend(loc='center left', bbox_to_anchor=(1, 0.5))
     ax.set(xlabel="Time", ylabel=f"position size ({INDEX})")
 
     ax.grid(linestyle='--', linewidth=1)
@@ -177,11 +194,14 @@ def plot_num_traders(ax, df):
 
 
 def plot_prices(ax, df):
-    ax.plot(df['datetime'], df['idx_px'], 'k-', label="index price")
-    ax.plot(df['datetime'], df['mark_price'], 'r:', label="mark price")
+    ax.plot(df['datetime'], df['idx_px'], 'k-', label="Oracle price")
+    ax.plot(df['datetime'], df['mark_price'], 'r:', label="Mark price")
     ax.set(xlabel="Time", ylabel=f"{INDEX}/{QUOTE}")
     ax.grid(linestyle='--', linewidth=1)
     ax.xaxis.set_major_formatter(mdates.DateFormatter('%y-%m-%d'))
+    box = ax.get_position()
+    ax.set_position([box.x0, box.y0, box.width * 0.8, box.height])
+    ax.legend(loc='center left', bbox_to_anchor=(1, 0.5))
     
     
 def plot_pnl(ax, df):
@@ -193,7 +213,11 @@ def plot_pnl(ax, df):
         c = next(color)
         print(p)
         ax.plot(df['datetime'], df[p], c=c, label=p)
-    ax.legend()
+    # ax.legend()
+    box = ax.get_position()
+    ax.set_position([box.x0, box.y0, box.width * 0.8, box.height])
+    ax.legend(loc='center left', bbox_to_anchor=(1, 0.5))
+    
     ax.set(xlabel="Time", ylabel=f"{COLL}")
     ax.grid(linestyle='--', linewidth=1)
     ax.xaxis.set_major_formatter(mdates.DateFormatter('%y-%m-%d'))
@@ -214,7 +238,8 @@ def plot_analysis(df, file=None):
     ## First plot
     
     fig, axs = plt.subplots(3, 2, sharex=True)
-    mask = df["timestamp"] % (60 * 60) == 0
+    # mask = df["timestamp"] % (60 * 60) == 0
+    mask = df["timestamp"] % 60 == 0
    
     plot_price_premia(axs[0,0], df[mask])
     
@@ -261,6 +286,7 @@ def plot_analysis(df, file=None):
     plot_amm_funds(axs[1,1], df[mask])
 
     fig = plt.gcf()
+    fig.autofmt_xdate()
     fig.set_size_inches((12, 11), forward=False)
     if file is not None:
         fig.savefig(file[:-4] + '-2.png', dpi=500)

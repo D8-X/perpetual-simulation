@@ -59,7 +59,7 @@ class MomentumTrader(Trader):
             if self.position_bc == 0:
                 # no open position -> try to open one
                 pos = np.sign(indicator) * perp.get_max_leverage_position(self)
-                pos = perp.scale_to_max_signed_trader_position(pos)
+                pos = perp.scale_to_max_signed_trader_position(pos) * 0.99
                 if self.is_below_max_deviation(pos, self.slippage_tol):
                     return (pos, False)
                 return (0, False)

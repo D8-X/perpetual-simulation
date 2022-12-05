@@ -38,6 +38,7 @@ class AMM:
         self.trade_count = 0
         self.fees_earned = 0
         self.trader_dir = []
+        self.lp_cc_apy = []
         self.earnings = dict()
 
 
@@ -120,8 +121,13 @@ class AMM:
         for p in self.perpetual_list:
             total_target = total_target + p.default_fund_target_size
         gap_ratio = self.default_fund_cash_cc/total_target
+        # if gap_ratio < 0.01:
+        #     self.is_emergency = True
         return gap_ratio
     
+    def record_apy(self, apy):
+        self.lp_cc_apy.append(apy)
+        
     def __update_DF_size_target(self):
         for p in self.perpetual_list:
             p.update_DF_size_target()

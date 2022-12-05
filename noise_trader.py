@@ -94,7 +94,7 @@ class NoiseTrader(Trader):
         # shrink pos subject to slippage
         pos = self.get_max_slippage_size(max_slippage=self.slippage_tol, trade_amount_target=pos, tol=0.0010)
         # scale down, maybe
-        pos = perp.scale_to_max_signed_trader_position(pos)
+        pos = perp.scale_to_max_signed_trader_position(pos) * 0.99
         
         if pos != 0:
             return (pos, False)
