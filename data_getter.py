@@ -347,8 +347,25 @@ if __name__ == "__main__":
     #     'CHFUSD_Polygon_Mainnet', 
     #     'https://polygon-rpc.com/', 
     #     '0xc76f762CedF0F78a439727861628E0fdfE1e70c2',
-    #     fromdate=datetime.datetime(2022, 6, 1)
+    #     fromdate=datetime.datetime(2022, 1, 1)
     # )
+    
+    # # AVAX on Polygon: 0xe01eA2fbd8D76ee323FbEd03eB9a8625EC981A10
+    # df = maybe_fetch_chainlink_data(
+    #     'AVAXUSD_Polygon_Mainnet', 
+    #     'https://polygon-rpc.com/', 
+    #     '0xe01eA2fbd8D76ee323FbEd03eB9a8625EC981A10',
+    #     fromdate=datetime.datetime(2022, 1, 1)
+    # )
+    
+    # AVAX on Avalanche: 0x0A77230d17318075983913bC2145DB16C7366156
+    df = maybe_fetch_chainlink_data(
+        'AVAXUSD_Avalanche_Mainnet', 
+        'https://rpc.ankr.com/avalanche', 
+        '0x0A77230d17318075983913bC2145DB16C7366156',
+        fromdate=datetime.datetime(2022, 9, 1)
+    )
+    
     # GBP on Polygon # slow
     # df = maybe_fetch_chainlink_data(
     #     'GBPUSD_Polygon_Mainnet', 
@@ -358,12 +375,12 @@ if __name__ == "__main__":
     # )
     
     # # Gold on Polygon
-    df = maybe_fetch_chainlink_data(
-        'XAUUSD_Polygon_Mainnet', 
-        'https://polygon-rpc.com/', 
-        '0x0C466540B2ee1a31b441671eac0ca886e051E410',
-        fromdate=datetime.datetime(2022, 1, 1)
-    )
+    # df = maybe_fetch_chainlink_data(
+    #     'XAUUSD_Polygon_Mainnet', 
+    #     'https://polygon-rpc.com/', 
+    #     '0x0C466540B2ee1a31b441671eac0ca886e051E410',
+    #     fromdate=datetime.datetime(2022, 1, 1)
+    # )
 
     # # MATIC on BSC
     # df = maybe_fetch_chainlink_data(
@@ -380,7 +397,9 @@ if __name__ == "__main__":
     #     '0xca236E327F629f9Fc2c30A4E95775EbF0B89fac8',
     #     fromdate=datetime.datetime(2022, 6, 1)
     # )
-    
+    # df = pd.read_csv("./data/index/chainlink/AVAXUSD_Polygon_Mainnet_1969-12-31_2022-12-07.csv")[['roundId', 'timestamp', 'datetime', 'price']]
+    # df['datetime'] = pd.to_datetime(df['datetime'])
+    # df['datetime'] = df['datetime'].apply(lambda x: x.replace(tzinfo=pytz.utc))
     summarize_data(df, n_points=50_000)
     
     #  maybe_fetch_chainlink_data(4, fromdate=datetime.date(2021, 11, 1), toroundID=36893488147419285875) #, todate=datetime.date(2022, 3, 17))
