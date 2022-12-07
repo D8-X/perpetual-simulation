@@ -6,10 +6,12 @@ import glob
 import json
 import multiprocessing
 import pprint
+import re
 import time
 from scipy import stats
 from arb_trader import ArbTrader
 from noise_staker import NoiseStaker
+from perpetual import Perpetual
 from trader import CollateralCurrency
 from noise_trader import NoiseTrader
 from momentum_trader import MomentumTrader
@@ -49,7 +51,7 @@ NUM_TRADERS = {
 # new traders join randomly - up to how many each time? 
 # e.g. if we start with N traders and multiplier is M, then there will be in average (M+1) * N traders by the end of the simulation
 # to keep same growth rate but reduced target (e.g. to go from 4 to 2 months and keep all other params the same, use divider = 2)
-GROWTH_DIVIDER = 2
+GROWTH_DIVIDER = 1
 GROWTH_MULTIPLIER = {
     'BTCUSD': 20 // GROWTH_DIVIDER, 
     'XAUUSD': 20 // GROWTH_DIVIDER, 
@@ -109,7 +111,7 @@ SIM_PARAMS['protocol_profit_withdrawal_freeze_period'] = 60 * 24 * 30 # no withd
 SIM_PARAMS['animate_premia'] = False # just for testing, do not use
 
 # probability that an inactive trader opens a position within 24 hours = 1 / num_trades_per_day
-SIM_PARAMS['num_trades_per_day'] = 2
+# SIM_PARAMS['num_trades_per_day'] = 0.6
 
 # prob that trader is in a tier that pays zero fees. higher is more conservative
 SIM_PARAMS['prob_best_tier'] = 0 # not used when simulating zero fees
@@ -126,18 +128,19 @@ SIM_PARAMS['holding_period_months'] = 1
 # this is just for logging on screen
 SIM_PARAMS['log_every'] = 2_000
 
+POSITIONS_WATCH = dict()
 
 # Parallelize run?
-RUN_PARALLEL = True
+RUN_PARALLEL = False
 
 def main():
     all_runs_t0 = datetime.now()
 
     # seed for cash samples, random agent trading order, random agent preferences
     seeds = [
-        123,
-        345,
-        # 567,
+        # 123,
+        # 345,
+        567,
         # 42, 
         # 31415,
         # 66260,
@@ -145,16 +148,17 @@ def main():
 
     # simulation period
     simulation_horizons = [
+        (datetime(2022, 7, 15, 0, 0, tzinfo=timezone.utc), datetime(2022, 8, 16, 0, 0, tzinfo=timezone.utc)),
         # (datetime(2022, 5, 15, 0, 0, tzinfo=timezone.utc), datetime(2022, 10, 16, 0, 0, tzinfo=timezone.utc)),
         # (datetime(2022, 6, 17, 0, 0, tzinfo=timezone.utc), datetime(2022, 10, 18, 0, 0, tzinfo=timezone.utc)),
-        (datetime(2022, 7, 19, 0, 0, tzinfo=timezone.utc), datetime(2022, 10, 20, 0, 0, tzinfo=timezone.utc)), 
+        # (datetime(2022, 7, 19, 0, 0, tzinfo=timezone.utc), datetime(2022, 10, 20, 0, 0, tzinfo=timezone.utc)), 
     ]
 
     # given that a trader is about to open a position, with what probability will it be a long one?
     long_probs = [
-        0.38,
+        # 0.38,
         0.52,
-        0.64,
+        # 0.64,
         # 0.95,
     ]
 
@@ -170,16 +174,24 @@ def main():
     # exact cash amounts for each trader are randomized, this is an average
     # distribution is fat tailed to the right (i.e. whales exist but are rare)
     usds_per_trader = [
-        1_000,
-        1_200,
+        # 1_000,
+        # 1_200,
         # 1_600,
         
         # 1_500,
         # 2_000,
+        2_500,
         # 3_500,
     ]
+    
+    num_trades_per_day = [
+        # 0.25,
+        # 0.5,
+        1,
+        # 2,
+    ]
 
-    run_configs = itertools.product(seeds, simulation_horizons, long_probs, initial_investments, usds_per_trader)
+    run_configs = itertools.product(seeds, simulation_horizons, long_probs, initial_investments, usds_per_trader, num_trades_per_day)
     total_hash = hash(run_configs)
 
     filename = f"./results/sim_run_id_{total_hash}.csv"
@@ -195,6 +207,7 @@ def main():
         sim_params['prob_long'] = run_config[2]
         sim_params['initial_protocol_investment'] = run_config[3]
         sim_params['usd_per_trader'] = run_config[4] 
+        sim_params['num_trades_per_day'] = run_config[5]
 
         # print("\n" + "".join(("-" for _ in range(100))) + "\n")
         # print(f"Run details:")
@@ -262,6 +275,17 @@ def report_stats(amm_state, sim):
     res["LP_CC_APY"] = amm_state.at[n-1, "lp_apy"] #(res["LP_Final_CC"] / res["LP_Init_CC"] - 1) * 365 / res["Days"]
     res["ProfitQC_per_VolumeQC"] = res["Profit_QC"] / res["Volume_QC"]
     res["ProfitCC_per_VolumeCC"] = res["Profit_CC"] / res["Volume_CC"]
+    
+    pi_columns = [x for x in amm_state.columns if re.search('price_impact', x)]
+    for col in pi_columns:
+        x = amm_state[col].values
+        q = [0.25, 0.5, 0.75]
+        v = np.quantile(x, q)
+        res[f"{col}_median"] = v[1]
+        res[f"{col}_25pct"] = v[0]
+        res[f"{col}_75pct"] = v[2]
+        res[f"{col}_mean"] = np.nanmean(x)
+        res[f"{col}_stdev"] = np.nanstd(x)
 
     return res
 
@@ -352,7 +376,7 @@ def simulate(sim_input):
         perps.append(perp_idx)
 
         # to store simulation results per perp
-        state_dict[perp_idx] = np.empty((time_df.shape[0], len(get_perp_state_keys())))
+        state_dict[perp_idx] = np.empty((time_df.shape[0], len(get_perp_state_keys(amm.get_perpetual(perp_idx)))))
         # create traders
         traders.extend(
             initialize_traders(
@@ -650,9 +674,24 @@ def simulate(sim_input):
     amm_state['total_volume_cc'] = 0
     for i, symbol in enumerate(SYMBOLS):
         perp_idx = perps[i]
-        state_dict[perp_idx] = pd.DataFrame(state_dict[perp_idx], columns=get_perp_state_keys())
+        state_dict[perp_idx] = pd.DataFrame(state_dict[perp_idx], columns=get_perp_state_keys(amm.get_perpetual(perp_idx)))
         state_dict[perp_idx]['idx_px'] = idx_s2[symbol]
         state_dict[perp_idx]['cex_px'] = cex_ts[symbol]
+        # # price impact for 100k lots (so 100 ETH for ETH perp)
+        # state_dict[perp_idx]['100klots_long_slip'] = (state_dict[perp_idx]['100klots_long_price'] / state_dict[perp_idx]['mid_price'] - 1)
+        # state_dict[perp_idx]['100klots_short_slip'] = (state_dict[perp_idx]['100klots_short_price'] / state_dict[perp_idx]['mid_price'] - 1)
+        # # price impact for a position worth 10K USD at spot (so it costs around $500 to open at 20x, typical amount of cash used by traders)
+        # state_dict[perp_idx]['10k_long_slip'] = (state_dict[perp_idx]['10k_long_price'] / state_dict[perp_idx]['mid_price'] - 1)
+        # state_dict[perp_idx]['10k_short_slip'] = (state_dict[perp_idx]['10k_short_price'] / state_dict[perp_idx]['mid_price'] - 1)
+        # price impact for a vector of position sizes
+        price_columns = [x for x in state_dict[perp_idx].columns if re.search('^perp_price_', x)]
+        # price impact as simple average 
+        amm_state[f"{symbol}_price_impact"] = 0
+        for col in price_columns:
+            state_dict[perp_idx][col] = state_dict[perp_idx][col] / state_dict[perp_idx]['mid_price'] - 1
+            amm_state[f"{symbol}_price_impact"] += state_dict[perp_idx][col].abs()
+        amm_state[f"{symbol}_price_impact"] = amm_state[f"{symbol}_price_impact"]  / len(price_columns)
+        
         amm_state['total_volume_cc'] += state_dict[perp_idx]['perp_volume_cc']
         amm_state['total_volume_qc'] += state_dict[perp_idx]['perp_volume_qc']
     for i, symbol in enumerate(SYMBOLS):
@@ -1076,8 +1115,8 @@ def record_amm_state(t, state, amm, stakers, traders):
     state[t,:] = new_state
 
 
-def get_perp_state_keys():
-    return ['mark_price',
+def get_perp_state_keys(perp):
+    keys = ['mark_price',
         'mid_price',
         'funding_rate',
         # cash
@@ -1110,22 +1149,40 @@ def get_perp_state_keys():
         
         # trade sizes and prices
         'max_long_trade',
-        'max_long_price',
+        # 'max_long_price',
         'max_short_trade',
-        'max_short_price',
-        'min_long_price',
-        'min_short_price',
-        '10k_long_price',
-        '10k_short_price',
-        '100klots_long_price',
-        '100klots_short_price',
+        # 'max_short_price',
+        # 'min_long_price',
+        # 'min_short_price',
+        # '10k_long_price',
+        # '10k_short_price',
+        # '100klots_long_price',
+        # '100klots_short_price',
         'avg_long_price',
         'avg_short_price',
         
         # trader stats
         'perp_trader_pnl_cc',
     ]
+    
+    keys.extend(
+        [f"perp_price_{pos}" for pos in get_positions_to_price(perp)]
+    )
+    
+    return keys
 
+def get_positions_to_price(perp: Perpetual):
+    if perp.symbol in POSITIONS_WATCH.keys():
+        return POSITIONS_WATCH[perp.symbol]
+    # lots = [100, 80, 65, 50, 40, 30, 25, 20, 15, 13, 11, 9, 7, 5, 4, 3, 2, 1]
+    lots = [100, 75, 50, 25, 10, 5, 1]
+    # sizes in thousands of lots
+    lot_size = perp.params['fLotSizeBC']
+    sizes = [-x * (lot_size * 1_000) for x in lots]
+    lots.sort()
+    sizes.extend([x * (lot_size * 1_000) for x in lots])
+    POSITIONS_WATCH[perp.symbol] = sizes
+    return sizes
 
 def record_perp_state(time_idx, state_dict, perp, sim, traders):
     """record statistics and state"""
@@ -1144,8 +1201,10 @@ def record_perp_state(time_idx, state_dict, perp, sim, traders):
     # Upward-biased EMA
     pos6 = perp.current_trader_exposure_EMA
     
+    prices = [perp.get_price(pos) for pos in get_positions_to_price(perp)]
+    
     # store
-    state_dict[perp.my_idx][time_idx,:] = [
+    state = [
         perp.get_mark_price(),
         0.5 * (perp.get_price(perp.params['fLotSizeBC']) + perp.get_price(-perp.params['fLotSizeBC'])),
         perp.get_funding_rate(),
@@ -1179,21 +1238,23 @@ def record_perp_state(time_idx, state_dict, perp, sim, traders):
         
         # trades and prices
         pos1,
-        perp.get_price(pos1),
+        # perp.get_price(pos1),
         pos2,
-        perp.get_price(pos2),
-        perp.get_price(pos3),
-        perp.get_price(-pos3),
-        perp.get_price(pos4),
-        perp.get_price(-pos4),
-        perp.get_price(pos5),
-        perp.get_price(-pos5),
+        # perp.get_price(pos2),
+        # perp.get_price(pos3),
+        # perp.get_price(-pos3),
+        # perp.get_price(pos4),
+        # perp.get_price(-pos4),
+        # perp.get_price(pos5),
+        # perp.get_price(-pos5),
         perp.get_price(pos6),
         perp.get_price(-pos6),    
         
         # trader pnl
         sum(t.pnl_cc for t in traders if t.position_bc != 0 and t.perp_idx == perp.my_idx)
     ]
+    state.extend(prices)
+    state_dict[perp.my_idx][time_idx,:] = state
 
 def to_readable_fiat(x):
     if x >= 500_000:
