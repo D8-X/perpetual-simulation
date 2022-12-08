@@ -66,14 +66,14 @@ GROWTH_MULTIPLIER = {
 
 # how many arb bots we run for each perp - zero is conservative
 BOTS_PER_PERP = {
-    'BTCUSD': 0,
+    'BTCUSD': 20,
     'BNBUSD': 0,
     'XAUUSD': 0,
-    'ETHUSD': 0,
+    'ETHUSD': 20,
     'CHFUSD': 0,
     'GBPUSD': 0,
     'SPYUSD': 0,
-    'MATICUSD': 0,
+    'MATICUSD': 20,
     'LINKUSD': 0,
 }
 
@@ -140,15 +140,15 @@ def main():
     seeds = [
         # 123,
         # 345,
-        567,
-        # 42, 
+        # 567,
+        42, 
         # 31415,
         # 66260,
     ]
 
     # simulation period
     simulation_horizons = [
-        (datetime(2022, 7, 15, 0, 0, tzinfo=timezone.utc), datetime(2022, 8, 16, 0, 0, tzinfo=timezone.utc)),
+        (datetime(2022, 7, 15, 0, 0, tzinfo=timezone.utc), datetime(2022, 10, 16, 0, 0, tzinfo=timezone.utc)),
         # (datetime(2022, 5, 15, 0, 0, tzinfo=timezone.utc), datetime(2022, 10, 16, 0, 0, tzinfo=timezone.utc)),
         # (datetime(2022, 6, 17, 0, 0, tzinfo=timezone.utc), datetime(2022, 10, 18, 0, 0, tzinfo=timezone.utc)),
         # (datetime(2022, 7, 19, 0, 0, tzinfo=timezone.utc), datetime(2022, 10, 20, 0, 0, tzinfo=timezone.utc)), 
@@ -180,15 +180,15 @@ def main():
         
         # 1_500,
         # 2_000,
-        2_500,
+        3_000,
         # 3_500,
     ]
     
     num_trades_per_day = [
         # 0.25,
         # 0.5,
-        1,
-        # 2,
+        # 1,
+        2,
     ]
 
     run_configs = itertools.product(seeds, simulation_horizons, long_probs, initial_investments, usds_per_trader, num_trades_per_day)

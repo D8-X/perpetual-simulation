@@ -158,6 +158,8 @@ class ArbTrader(Trader):
                 (trade_dir<0 and px_perp<price_threshold)):
                 return (0, False)
             pos = self.find_position_size(my_perp, available_funds=self.cash_cc, dir=trade_dir, price_threshold = price_threshold)
+            if np.abs(pos) < 10 * my_perp.params['fLotSizeBC']:
+                return (0, False)
             #print(f"ArbTrader opening basis trade: Pos={pos} Sov price={my_perp.get_price(pos):.1f} CEX price={px_perp:.1f}")
             return (pos, False)
         
@@ -169,7 +171,7 @@ class ArbTrader(Trader):
             pos = -self.position_bc
             # we only close a trade amount that does not destroy
             # our pnl. So we try 5 different trade sizes
-            minabspos = np.min((0.001, np.abs(self.position_bc)))
+            minabspos = np.min((10 * my_perp.params['fLotSizeBC'], np.abs(self.position_bc)))
             count = 0
             px = my_perp.get_price(pos)
             pnl = self.calc_pnl(px, -pos)
@@ -181,7 +183,6 @@ class ArbTrader(Trader):
             if pnl<0 and is_favorable:
                 return (0, False)
             pos = np.sign(pos)*np.max((np.abs(pos), minabspos))
-            #print(f"ArbTrader closing basis trade: Pos={pos} Sov price={my_perp.get_price(pos):.1f} CEX price={px_perp:.1f}")
             return (pos, True)
         
         return (0, False)

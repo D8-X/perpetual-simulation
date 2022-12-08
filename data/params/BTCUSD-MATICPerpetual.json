@@ -6,13 +6,13 @@
   "fPnLPartRate": 0.000025,
   "fReferralRebateCC": 0.01,
   "fLiquidationPenaltyRate": 0.01,
-  "fMinimalSpread": 0.00015,
-  "fIncentiveSpread": 0.00005,
+  "fMinimalSpread": 0.00005,
+  "fIncentiveSpread": 0.00015,
   "fLotSizeBC": 0.0001,
   "fFundingRateClamp": 0.0005,
   "fMarkPriceEMALambda": 0.7,
   "fSigma2": 0.08,
-  "fSigma3": 0.12,
+  "fSigma3": 0.10,
   "fRho23": 0.25,
   "eCollateralCurrency": "QUANTO",
   "fStressReturnS2": [
@@ -26,9 +26,9 @@
   "fDFCoverNRate": 0.05,
   "fDFLambda": [
     0.9995,
-    0.5
+    0.85
   ],
-  "fAMMTargetDD": [-3.290526728, -3.035672366],
+  "fAMMTargetDD": [-3.719016482, -3.4316144],
   "fAMMMinSizeCC": 122000,
   "fMinimalTraderExposureEMA": 6,
   "fMinimalAMMExposureEMA": 9,

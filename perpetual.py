@@ -303,11 +303,11 @@ class Perpetual:
         K2 = -self.amm_trader.position_bc
         rate = np.max((premium_rate, c)) + np.min((premium_rate, -c)) + np.sign(K2)*0.0001
         rate = rate * self.glbl_params['block_time_sec']/(8*60*60)
-        # max_rate = (self.params['fInitialMarginRate']-
-        #             self.params['fMaintenanceMarginRate'])*0.9
-        # min_rate = -max_rate
-        # rate = np.max((rate, min_rate)) if rate < 0 else np.min(
-        #     (rate, max_rate))
+        max_rate = (self.params['fInitialMarginRate']-
+                    self.params['fMaintenanceMarginRate'])*0.9
+        min_rate = -max_rate
+        rate = np.max((rate, min_rate)) if rate < 0 else np.min(
+            (rate, max_rate))
         return rate
 
     def get_base_to_collateral_conversion(self, is_mark_price: bool):

@@ -1,7 +1,7 @@
 */*.pyc
 *.pkl
-results/res*.csv
-results/sim_id*.csv
+results/res*
+results/sim_*.csv
 *.aux
 *.bbl
 *.blg

@@ -11,7 +11,7 @@ from simulation import load_perp_params
 COLL = 'MATIC'
 QUOTE = 'USD'
 
-FILENAME = 'results/res129-0-ETHUSDMATIC_20221017--1541040943975829946.csv'
+FILENAME = 'results/res75-20-ETHUSDMATIC_2022815--2725865698861728559.csv'
 
 perpsymbol = re.search("-[A-Z]+_", FILENAME).group(0)[1:-1]
 INDEX = perpsymbol[:(len(perpsymbol) - len(QUOTE + COLL))]
@@ -24,18 +24,25 @@ def main():
     df['mid_price_rel'] = (df['mid_price'] - df['idx_px']) / df['idx_px']
     df['mark_price_rel'] = (df['mark_price'] - df['idx_px']) / df['idx_px']
     df['cex_price_rel'] = df['cex_px'] / df['idx_px'] - 1
-    df['max_long_slip'] = (df['max_long_price'] - df['mid_price']) / df['mid_price']
-    df['avg_long_slip'] = (df['avg_long_price'] - df['mid_price']) / df['mid_price']
-    df['min_long_slip'] = (df['min_long_price'] - df['mid_price']) / df['mid_price']
-    df['max_short_slip'] = (df['max_short_price'] - df['mid_price']) / df['mid_price']
-    df['avg_short_slip'] = (df['avg_short_price'] - df['mid_price']) / df['mid_price']
-    df['min_short_slip'] = (df['min_short_price'] - df['mid_price']) / df['mid_price']
-    df['100klots_long_slip'] = (df['100klots_long_price'] - df['mid_price']) / df['mid_price']
-    df['100klots_short_slip'] = (df['100klots_short_price'] - df['mid_price']) / df['mid_price']
-    df['10k_long_slip'] = (df['10k_long_price'] - df['mid_price']) / df['mid_price']
-    df['10k_short_slip'] = (df['10k_short_price'] - df['mid_price']) / df['mid_price']
+    # df['max_long_slip'] = (df['max_long_price'] - df['mid_price']) / df['mid_price']
+    # df['avg_long_slip'] = (df['avg_long_price'] - df['mid_price']) / df['mid_price']
+    # df['min_long_slip'] = (df['min_long_price'] - df['mid_price']) / df['mid_price']
+    # df['max_short_slip'] = (df['max_short_price'] - df['mid_price']) / df['mid_price']
+    # df['avg_short_slip'] = (df['avg_short_price'] - df['mid_price']) / df['mid_price']
+    # df['min_short_slip'] = (df['min_short_price'] - df['mid_price']) / df['mid_price']
+    # some sims already have this info
+    # if not '100klots_long_slip' in df.columns:
+    #     df['100klots_long_slip'] = (df['100klots_long_price'] - df['mid_price']) / df['mid_price']
+    #     df['100klots_short_slip'] = (df['100klots_short_price'] - df['mid_price']) / df['mid_price']
+    #     df['10k_long_slip'] = (df['10k_long_price'] - df['mid_price']) / df['mid_price']
+    #     df['10k_short_slip'] = (df['10k_short_price'] - df['mid_price']) / df['mid_price']
 
 
+    price_columns = [x for x in df.columns if re.search('^perp_pi', x)]
+    if len(price_columns) > 0:
+        # transform price into price impact
+        for col in price_columns:
+            df[col] = df[col] / df['mid_price'] - 1
     
 
     df['datetime'] = pd.to_datetime(df['time'], format='%y-%m-%d %H:%M', utc=True)
@@ -46,15 +53,30 @@ def main():
 
     print(f"Date range: {datetime.fromtimestamp(from_date)} -- {datetime.fromtimestamp(to_date)}")
 
-    print("\nPremium summary (in bps):")
-    print(1e4 * df[['mark_price_rel', 'avg_long_slip', 'avg_short_slip', '100klots_long_slip', '100klots_short_slip']].describe())
-
-    print("\nOpen+Close 100K lots summary:")
-    x = (df['100klots_long_slip'].abs() + df['100klots_short_slip'].abs()).values
-    q = [0.01, 0.05, 0.25, 0.5, 0.6, 0.7, 0.8, 0.9, 0.95]
-    v = np.quantile(x, q)
-    print("\n".join([f"{100*_q:.1f}%: {1e4 *_v: .4f} bps" for _q, _v in zip(q,v)]))
-    print(f"mean +- stddev: {np.nanmean(1e4 * x)} +- {np.nanstd(1e4 * x)} (bps)")
+    # print("\nPremium summary (in bps):")
+    # print(1e4 * df[['mark_price_rel', 'avg_long_slip', 'avg_short_slip', '100klots_long_slip', '100klots_short_slip']].describe())
+    q = [0.01, 0.05, 0.10, 0.20, 0.25, 0.4, 0.5, 0.6, 0.7, 0.75, 0.8, 0.9, 0.95, 0.99]
+    
+    print("\nPrice impact summary:")
+    pi_col = [c for c in df.columns if re.search(f"^{INDEX}{QUOTE}_price_impact", c)]
+    if len(pi_col) > 0:
+        x = df[pi_col[0]].values
+        v = np.quantile(x, q)
+        print("\n".join([f"{100*_q:.1f}%: {1e4 *_v: .4f} bps" for _q, _v in zip(q,v)]))
+        print(f"mean +- stddev: {np.nanmean(1e4 * x)} +- {np.nanstd(1e4 * x)} (bps)")
+        
+    # x = (df['100klots_long_slip'].abs() + df['100klots_short_slip'].abs()).values
+    # q = [0.01, 0.05, 0.25, 0.5, 0.6, 0.7, 0.8, 0.9, 0.95]
+    # v = np.quantile(x, q)
+    # print("\n".join([f"{100*_q:.1f}%: {1e4 *_v: .4f} bps" for _q, _v in zip(q,v)]))
+    # print(f"mean +- stddev: {np.nanmean(1e4 * x)} +- {np.nanstd(1e4 * x)} (bps)")
+    
+    # print("\nOpen+Close 100K lots, 24 hour rolling average:")
+    # x = (df['100klots_long_slip'].rolling(24 * 60).mean().abs().fillna(method='bfill') + df['100klots_short_slip'].rolling(8 * 60).mean().abs().fillna(method='bfill')).values
+    
+    # v = np.quantile(x, q)
+    # print("\n".join([f"{100*_q:.1f}%: {1e4 *_v: .4f} bps" for _q, _v in zip(q,v)]))
+    # print(f"mean +- stddev: {np.nanmean(1e4 * x)} +- {np.nanstd(1e4 * x)} (bps)")
     
     
     # fig, ax = plt.subplots(2, 1, sharex=True)    
@@ -129,11 +151,12 @@ def plot_perp_funds(ax, df):
     ax.grid(linestyle='--', linewidth=1)
 
 def plot_price_premia(ax, df):
-    if df['cex_price_rel'].abs().max() > 0:
-        ax.plot(df['datetime'], df['cex_price_rel']*1e4,  'k-', label='CEX mark-premium')
-    ax.plot(df['datetime'], df['mid_price_rel']*1e4, 'r-', label='DEX mid-premium')
-    ax.plot(df['datetime'], df['mark_price_rel']*1e4,  'y:', label='DEX mark-premim')
-    ax.plot(df['datetime'], df['funding_rate'].rolling(8 * 60).sum()*1e4, 'g-', label='DEX funding rate (8h accrued)')
+    # if df['cex_price_rel'].abs().max() > 0:
+    #     ax.plot(df['datetime'], df['cex_price_rel']*1e4,  'k-', label='CEX mark-premium')
+    # ax.plot(df['datetime'], df['mid_price_rel']*1e4, 'r:', alpha=0.5,  label='DEX mid-premium')
+    # ax.plot(df['datetime'], df['mark_price_rel']*1e4,  'r-', label='DEX mark-premim')
+    ax.plot(df['datetime'], df['funding_rate']*1e4 * 8 * 60, 'g-', label='DEX funding rate') # * 8 * 60 so it's an 8h rate
+    ax.plot(df['datetime'], df['funding_rate'].rolling(8 * 60).sum()*1e4, 'g:', alpha=0.5)
 
     ax.set(xlabel="Time", ylabel="Basis Points")
     ax.grid(linestyle='--', linewidth=1)
@@ -144,20 +167,46 @@ def plot_price_premia(ax, df):
     ax.xaxis.set_major_formatter(mdates.DateFormatter('%y-%m-%d'))
 
 def plot_perp_slippage(ax, df):
-    perp_params = load_perp_params(f"{INDEX}{QUOTE}", COLL)
+    # perp_params = load_perp_params(f"{INDEX}{QUOTE}", COLL)
+    # lot_size = perp_params['fLotSizeBC']
+    
+    # # min position
+    # ax.plot(df['datetime'], df['min_short_slip']*1e4, '-', alpha=0.5, color='green')
+    # ax.plot(df['datetime'], df['min_long_slip']*1e4, '-', alpha=0.5, color='green', label=f"Min long/short")
+    
+    ## max position
     # ax.plot(df['datetime'], df['max_long_slip']*1e4, '-', alpha=0.5, color='red', label=f"Max long/short")
-    ax.plot(df['datetime'], df['100klots_long_slip']*1e4, '-', alpha=0.5, color='purple', label=f"{100_000 * perp_params['fLotSizeBC']} {INDEX} long/short")
-    ax.plot(df['datetime'], df['10k_long_slip']*1e4, '-', alpha=0.5, color='blue', label=f"10,000 USD long/short")
-    # ax.plot(df['datetime'], df['avg_long_slip']*1e4, '-', alpha=0.5, color='yellow', label=f"Avg long/short")
-    ax.plot(df['datetime'], df['min_long_slip']*1e4, '-', alpha=0.5, color='green', label=f"Min long/short")
-
     # ax.plot(df['datetime'], df['max_short_slip']*1e4,  '-', alpha=0.5, color='red')
-    ax.plot(df['datetime'], df['100klots_short_slip']*1e4, '-', alpha=0.5, color='purple')
-    ax.plot(df['datetime'], df['10k_short_slip']*1e4, '-', alpha=0.5, color='blue')
-    # ax.plot(df['datetime'], df['avg_short_slip']*1e4, '-', alpha=0.5, color='yellow')
-    ax.plot(df['datetime'], df['min_short_slip']*1e4, '-', alpha=0.5, color='green')
+    
+    # # average position
+    # ax.plot(df['datetime'], df['avg_long_slip']*1e4, '-', alpha=0.3, color='black', label=f"EMA")
+    # ax.plot(df['datetime'], df['avg_short_slip']*1e4, '-', alpha=0.3, color='black')
+    
+    # # 10,000 USD worth of index, which costs around $500 at 20x leverage (typical size)
+    # ax.plot(df['datetime'], df['10k_long_slip']*1e4, ':', alpha=0.4, color='orange')
+    # ax.plot(df['datetime'], df['10k_long_slip'].rolling(24 * 60).mean()*1e4, '-', alpha=0.6, color='blue', label=f"10,000 {QUOTE}")
+    # ax.plot(df['datetime'], df['10k_short_slip']*1e4, '-', alpha=0.4, color='orange')
+    # ax.plot(df['datetime'], df['10k_short_slip'].rolling(24 * 60).mean()*1e4, '-', alpha=0.6, color='blue')
+    
+    # # '100 ETH' : 24 hour rolling mean and actual in the background
+    # ax.plot(df['datetime'], df['100klots_long_slip']*1e4, ':', alpha=0.4, color='purple')
+    # ax.plot(df['datetime'], df['100klots_long_slip'].rolling(24 * 60).mean()*1e4, '-', alpha=0.6, color='purple', label=f"{100_000 * lot_size:.0f} {INDEX}")
+    # ax.plot(df['datetime'], df['100klots_short_slip']*1e4, ':', alpha=0.4, color='purple')
+    # ax.plot(df['datetime'], df['100klots_short_slip'].rolling(24 * 60).mean()*1e4, '-', alpha=0.6, color='purple')
+    
+    slippage = [x for x in df.columns if re.search('^perp_price', x)]
+    # print(perp_pnls)
+    color = iter(cm.rainbow(np.linspace(0, 1, len(slippage))))
+    for p in slippage:
+        c = next(color)
+        print(p)
+        ax.plot(df['datetime'], 1e4 * df[p], c=c, label=re.sub("perp_price_", "", p))
+    # ax.legend()
+    # box = ax.get_position()
+    # ax.set_position([box.x0, box.y0, box.width * 0.8, box.height])
+    # ax.legend(loc='center left', bbox_to_anchor=(1, 0.5))
 
-    ax.set(xlabel="Time", ylabel="slippage from mid price (bps)")
+    ax.set(xlabel="Time", ylabel="Price impact (from mid-price, bps)")
 
     ax.legend()
     # box = ax.get_position()
