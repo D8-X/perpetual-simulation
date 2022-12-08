@@ -10,6 +10,7 @@ import re
 import time
 from scipy import stats
 from arb_trader import ArbTrader
+from attacker import Attacker
 from noise_staker import NoiseStaker
 from perpetual import Perpetual
 from trader import CollateralCurrency
@@ -28,7 +29,7 @@ from joblib import Parallel, delayed
 
 
 # Perps we can simulate
-INDEX = ['BTC', 'ETH', 'XAU', 'BNB', 'CHF', 'GBP', 'SPY', 'MATIC', 'LINK']
+INDEX = ['BTC', 'ETH', 'XAU', 'BNB', 'CHF', 'GBP', 'SPY', 'MATIC', 'LINK', 'AVAX']
 
 # This simulation's quote and collateral currency
 QUOTE = 'USD'
@@ -44,8 +45,9 @@ NUM_TRADERS = {
     'GBPUSD': 0,
     'SPYUSD': 0,
     'TSLAUSD': 0,
-    'MATICUSD': 10,
+    'MATICUSD': 0,
     'LINKUSD': 0,
+    'AVAXUSD': 10,
 }
 
 # new traders join randomly - up to how many each time? 
@@ -62,19 +64,21 @@ GROWTH_MULTIPLIER = {
     'SPYUSD': 20 // GROWTH_DIVIDER,
     'MATICUSD': 20 // GROWTH_DIVIDER,
     'LINKUSD': 20 // GROWTH_DIVIDER,
+    'AVAXUSD': 20 // GROWTH_DIVIDER,
 }
 
 # how many arb bots we run for each perp - zero is conservative
 BOTS_PER_PERP = {
     'BTCUSD': 20,
-    'BNBUSD': 0,
-    'XAUUSD': 0,
+    'BNBUSD': 20,
+    'XAUUSD': 20,
     'ETHUSD': 20,
-    'CHFUSD': 0,
-    'GBPUSD': 0,
-    'SPYUSD': 0,
+    'CHFUSD': 20,
+    'GBPUSD': 20,
+    'SPYUSD': 20,
     'MATICUSD': 20,
-    'LINKUSD': 0,
+    'LINKUSD': 20,
+    'AVAXUSD': 20,
 }
 
 # Chainlink provides data from multiple networks
@@ -88,6 +92,7 @@ NETWORK = {
     'CHFUSD': 'Polygon',
     'MATICUSD': 'BSC_Mainnet',
     'LINKUSD': 'BSC_Mainnet',
+    'AVAXUSD': 'Avalanche_Mainnet',
 }
 
 # when a trader goes bankrupt, a new one joins - up to how many?
@@ -100,7 +105,7 @@ SYMBOLS = [b + 'USD' for b in INDEX if NUM_TRADERS[b + 'USD'] > 0]
 SIM_PARAMS = dict()
 
 # how much cash do we give each arbitrage bot?
-SIM_PARAMS['usd_per_bot'] = 1_000 
+SIM_PARAMS['usd_per_bot'] = 2_000 
 
 # withdrawing funds automatically - just for educational purposes, we set rate to 0 for now
 SIM_PARAMS['protocol_profit_withdrawal_frequency'] = 60 * 24 * 10 # we try to withdraw every n days (seconds)
@@ -148,10 +153,10 @@ def main():
 
     # simulation period
     simulation_horizons = [
-        (datetime(2022, 7, 15, 0, 0, tzinfo=timezone.utc), datetime(2022, 10, 16, 0, 0, tzinfo=timezone.utc)),
-        # (datetime(2022, 5, 15, 0, 0, tzinfo=timezone.utc), datetime(2022, 10, 16, 0, 0, tzinfo=timezone.utc)),
-        # (datetime(2022, 6, 17, 0, 0, tzinfo=timezone.utc), datetime(2022, 10, 18, 0, 0, tzinfo=timezone.utc)),
-        # (datetime(2022, 7, 19, 0, 0, tzinfo=timezone.utc), datetime(2022, 10, 20, 0, 0, tzinfo=timezone.utc)), 
+        # (datetime(2022, 7, 15, 0, 0, tzinfo=timezone.utc), datetime(2022, 10, 16, 0, 0, tzinfo=timezone.utc)),
+        # (datetime(2022, 5, 15, 0, 0, tzinfo=timezone.utc), datetime(2022, 8, 16, 0, 0, tzinfo=timezone.utc)),
+        # (datetime(2022, 6, 17, 0, 0, tzinfo=timezone.utc), datetime(2022, 9, 18, 0, 0, tzinfo=timezone.utc)),
+        (datetime(2022, 6, 20, 0, 0, tzinfo=timezone.utc), datetime(2022, 9, 20, 0, 0, tzinfo=timezone.utc)), 
     ]
 
     # given that a trader is about to open a position, with what probability will it be a long one?
@@ -167,28 +172,28 @@ def main():
         # 150_000_000, 
         # 50_000_000,
         # 3 * 250_000,
-        len(SYMBOLS) * 350_000,
-        # len(SYMBOLS) * 425_000,
+        # len(SYMBOLS) * 350_000,
+        len(SYMBOLS) * 2_000_000,
     ]
 
     # exact cash amounts for each trader are randomized, this is an average
     # distribution is fat tailed to the right (i.e. whales exist but are rare)
     usds_per_trader = [
-        # 1_000,
+        1_000,
         # 1_200,
         # 1_600,
         
         # 1_500,
         # 2_000,
-        3_000,
+        # 3_000,
         # 3_500,
     ]
     
     num_trades_per_day = [
         # 0.25,
         # 0.5,
-        # 1,
-        2,
+        1,
+        # 2,
     ]
 
     run_configs = itertools.product(seeds, simulation_horizons, long_probs, initial_investments, usds_per_trader, num_trades_per_day)
@@ -320,7 +325,8 @@ def simulate(sim_input):
     amm_params['ceil_staker_pnl_share'] = 0.75
     amm_params['block_time_sec'] = 60 # not the actual block time, but the highest data frequency
     
-    amm = AMM(amm_params, 0)
+    amm_t0 = int(datetime.timestamp(pd.to_datetime(time_df.at[0], format="%y-%m-%d %H:%M", utc=True)))
+    amm = AMM(amm_params, 0, t0=amm_t0)
     state_dict = dict()
     perps = []
     traders = []
@@ -394,6 +400,15 @@ def simulate(sim_input):
                 prob_long=sim_state['prob_long']
             )
         )
+        # ADD ATTACKER:
+        #  def __init__(
+        # self, amm: 'AMM', perp_idx : int, cc: CollateralCurrency, 
+        # cash_cc=np.nan, is_best_tier=False):
+        if symbol == "AVAXUSD":
+            traders.append(
+                Attacker(amm, perp_idx, perp_cc_ccy, 100_000_000)
+            )
+        
         # record_initial_endowment(traders)
 
     # the rest goes to DF
@@ -644,7 +659,8 @@ def simulate(sim_input):
         if amm.is_emergency:
             print("AMM emergency state reached")
             break
-        
+
+        # print(pd.to_datetime(amm.get_timestamp(), unit="s", origin='unix', utc=True))
         amm.inc_time()
 
         if (

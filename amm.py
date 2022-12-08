@@ -13,9 +13,10 @@ class AMM:
 
     def __init__(self,
                 params : dict,
-                initial_default_fund_cash_cc : float=0) -> None:
+                initial_default_fund_cash_cc : float=0, t0=0) -> None:
 
         self.current_time = 0
+        self.t0_timestamp = t0
         self.params = params
         self.perpetual_list = []
 
@@ -138,7 +139,7 @@ class AMM:
 
     def get_timestamp(self):
         # time elapsed in seconds, we start after one block
-        return (1 + self.current_time)*self.params["block_time_sec"]
+        return self.t0_timestamp + (self.current_time)*self.params["block_time_sec"]
 
     def __update_target_pool_sizes(self):
         # frequent update of AMM pool size
