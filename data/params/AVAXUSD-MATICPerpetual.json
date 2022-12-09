@@ -29,10 +29,10 @@
     0.97
   ],
   "fAMMTargetDD": [-3.4316144, -2.87816174],
-  "fAMMMinSizeCC": 72000,
-  "fMinimalTraderExposureEMA": 100000,
-  "fMinimalAMMExposureEMA": 100000,
-  "fMaximalTradeSizeBumpUp": 1.5,
+  "fAMMMinSizeCC": 2000000,
+  "fMinimalTraderExposureEMA": 140000,
+  "fMinimalAMMExposureEMA": 200000,
+  "fMaximalTradeSizeBumpUp": 2,
   "baseCurrency": "AVX",
   "quoteCurrency": "USD",
   "collateralCurrency": "MATC"
