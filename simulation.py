@@ -53,7 +53,7 @@ NUM_TRADERS = {
 # new traders join randomly - up to how many each time? 
 # e.g. if we start with N traders and multiplier is M, then there will be in average (M+1) * N traders by the end of the simulation
 # to keep same growth rate but reduced target (e.g. to go from 4 to 2 months and keep all other params the same, use divider = 2)
-GROWTH_DIVIDER = 1
+GROWTH_DIVIDER = 2
 GROWTH_MULTIPLIER = {
     'BTCUSD': 20 // GROWTH_DIVIDER, 
     'XAUUSD': 20 // GROWTH_DIVIDER, 
@@ -70,14 +70,14 @@ GROWTH_MULTIPLIER = {
 # how many arb bots we run for each perp - zero is conservative
 BOTS_PER_PERP = {
     'BTCUSD': 20,
-    'BNBUSD': 20,
-    'XAUUSD': 20,
+    'BNBUSD': 0,
+    'XAUUSD': 0,
     'ETHUSD': 20,
-    'CHFUSD': 20,
-    'GBPUSD': 20,
-    'SPYUSD': 20,
-    'MATICUSD': 20,
-    'LINKUSD': 20,
+    'CHFUSD': 0,
+    'GBPUSD': 0,
+    'SPYUSD': 0,
+    'MATICUSD': 0,
+    'LINKUSD': 0,
     'AVAXUSD': 20,
 }
 
@@ -131,12 +131,12 @@ SIM_PARAMS['monthly_stakes'] = 1.5
 SIM_PARAMS['holding_period_months'] = 1
 
 # this is just for logging on screen
-SIM_PARAMS['log_every'] = 2_000
+SIM_PARAMS['log_every'] =20_000
 
 POSITIONS_WATCH = dict()
 
 # Parallelize run?
-RUN_PARALLEL = False
+RUN_PARALLEL = True
 
 def main():
     all_runs_t0 = datetime.now()
@@ -145,24 +145,25 @@ def main():
     seeds = [
         # 123,
         # 345,
-        # 567,
+        567,
         42, 
-        # 31415,
-        # 66260,
+        31415,
+        66260,
     ]
 
     # simulation period
     simulation_horizons = [
-        # (datetime(2022, 7, 15, 0, 0, tzinfo=timezone.utc), datetime(2022, 10, 16, 0, 0, tzinfo=timezone.utc)),
+        (datetime(2022, 7, 20, 0, 0, tzinfo=timezone.utc), datetime(2022, 9, 20, 0, 0, tzinfo=timezone.utc)),
         # (datetime(2022, 5, 15, 0, 0, tzinfo=timezone.utc), datetime(2022, 8, 16, 0, 0, tzinfo=timezone.utc)),
         # (datetime(2022, 6, 17, 0, 0, tzinfo=timezone.utc), datetime(2022, 9, 18, 0, 0, tzinfo=timezone.utc)),
-        (datetime(2022, 6, 20, 0, 0, tzinfo=timezone.utc), datetime(2022, 9, 20, 0, 0, tzinfo=timezone.utc)), 
+        # (datetime(2022, 6, 20, 0, 0, tzinfo=timezone.utc), datetime(2022, 9, 20, 0, 0, tzinfo=timezone.utc)), 
+        # (datetime(2022, 7, 12, 0, 0, tzinfo=timezone.utc), datetime(2022, 9, 20, 0, 0, tzinfo=timezone.utc)), 
     ]
 
     # given that a trader is about to open a position, with what probability will it be a long one?
     long_probs = [
         # 0.38,
-        0.52,
+        0.5,
         # 0.64,
         # 0.95,
     ]
@@ -171,15 +172,17 @@ def main():
     initial_investments = [
         # 150_000_000, 
         # 50_000_000,
+        # 3_000_000,
         # 3 * 250_000,
-        # len(SYMBOLS) * 350_000,
-        len(SYMBOLS) * 2_000_000,
+        len(SYMBOLS) * 350_000,
+        len(SYMBOLS) * 1_000_000,
+        # len(SYMBOLS) * 10_000_000,
     ]
 
     # exact cash amounts for each trader are randomized, this is an average
-    # distribution is fat tailed to the right (i.e. whales exist but are rare)
+    # distribution is fat tailed
     usds_per_trader = [
-        1_000,
+        2_000,
         # 1_200,
         # 1_600,
         
@@ -902,7 +905,9 @@ def get_collateral_ccy(symbol, collateral):
         ccy = CollateralCurrency.QUANTO
     return ccy
 
-def draw_cash_sample(expected_cash_qc, k=0.5):
+def draw_cash_sample(expected_cash_qc, k=10):
+    # gamma(k,theta) ~ mean k* theta, variance k * theta^2 = k * (mean / k)^2 = mean / k
+    
     scale = expected_cash_qc * k
     min_cash = np.max((expected_cash_qc / 4, 500)) # no less than $500 per trader
     mean_over_min = (expected_cash_qc - min_cash) / scale
@@ -1190,8 +1195,9 @@ def get_perp_state_keys(perp):
 def get_positions_to_price(perp: Perpetual):
     if perp.symbol in POSITIONS_WATCH.keys():
         return POSITIONS_WATCH[perp.symbol]
-    # lots = [100, 80, 65, 50, 40, 30, 25, 20, 15, 13, 11, 9, 7, 5, 4, 3, 2, 1]
-    lots = [100, 75, 50, 25, 10, 5, 1]
+    
+    # lots (in thousands), ~ 100 * 0.8^n, n = 0, 1, ....
+    lots = [100, 80, 64, 51, 41, 33, 21, 17, 13, 11, 9, 7, 5, 4, 3, 2, 1, 0.92, 0.74]
     # sizes in thousands of lots
     lot_size = perp.params['fLotSizeBC']
     sizes = [-x * (lot_size * 1_000) for x in lots]

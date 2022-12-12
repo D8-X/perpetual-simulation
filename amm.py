@@ -51,7 +51,7 @@ class AMM:
 
 
 
-    def get_perpetual(self, idx):
+    def get_perpetual(self, idx) -> Perpetual:
         return self.perpetual_list[idx]
     
     def get_total_user_cash(self):

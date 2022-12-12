@@ -12,7 +12,7 @@
   "fFundingRateClamp": 0.0005,
   "fMarkPriceEMALambda": 0.7,
   "fSigma2": 0.08,
-  "fSigma3": 0.10,
+  "fSigma3": 0.12,
   "fRho23": 0.25,
   "eCollateralCurrency": "QUANTO",
   "fStressReturnS2": [
@@ -26,13 +26,13 @@
   "fDFCoverNRate": 0.05,
   "fDFLambda": [
     0.9995,
-    0.85
+    0.95
   ],
   "fAMMTargetDD": [-3.719016482, -3.4316144],
-  "fAMMMinSizeCC": 122000,
-  "fMinimalTraderExposureEMA": 6,
-  "fMinimalAMMExposureEMA": 9,
-  "fMaximalTradeSizeBumpUp": 1.5,
+  "fAMMMinSizeCC": 100000,
+  "fMinimalTraderExposureEMA": 3,
+  "fMinimalAMMExposureEMA": 5,
+  "fMaximalTradeSizeBumpUp": 10,
   "baseCurrency": "BTC",
   "quoteCurrency": "USD",
   "collateralCurrency": "MATC"

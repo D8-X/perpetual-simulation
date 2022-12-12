@@ -11,12 +11,12 @@
   "fLotSizeBC": 1,
   "fFundingRateClamp": 0.0005,
   "fMarkPriceEMALambda": 0.7,
-  "fSigma2": 0.10,
+  "fSigma2": 0.12,
   "fSigma3": 0,
   "fRho23": 0,
   "eCollateralCurrency": "BASE",
   "fStressReturnS2": [
-    -0.25,
+    -0.20,
     0.25
   ],
   "fStressReturnS3": [
@@ -29,10 +29,10 @@
     0.97
   ],
   "fAMMTargetDD": [-3.4316144, -2.87816174],
-  "fAMMMinSizeCC": 72000,
-  "fMinimalTraderExposureEMA": 80000,
-  "fMinimalAMMExposureEMA": 200000,
-  "fMaximalTradeSizeBumpUp": 2,
+  "fAMMMinSizeCC": 30000,
+  "fMinimalTraderExposureEMA": 35000,
+  "fMinimalAMMExposureEMA": 50000,
+  "fMaximalTradeSizeBumpUp": 10,
   "baseCurrency": "MATC",
   "quoteCurrency": "USD",
   "collateralCurrency": "MATC"

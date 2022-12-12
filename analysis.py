@@ -4,14 +4,14 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
-from datetime import datetime
+import datetime
 from matplotlib.pyplot import cm
 from simulation import load_perp_params
 
 COLL = 'MATIC'
 QUOTE = 'USD'
 
-FILENAME = 'results/res75-20-ETHUSDMATIC_2022815--2725865698861728559.csv'
+FILENAME = 'results/res135-20-AVAXUSDMATIC_2022919-7453644673771615700.csv'
 
 perpsymbol = re.search("-[A-Z]+_", FILENAME).group(0)[1:-1]
 INDEX = perpsymbol[:(len(perpsymbol) - len(QUOTE + COLL))]
@@ -20,6 +20,8 @@ def main():
     
     file = FILENAME if FILENAME[-3:] == 'csv' else FILENAME + '.csv'
     df = pd.read_csv(file)
+    
+    df = df.iloc[int(df.shape[0] * 2/3):]
 
     df['mid_price_rel'] = (df['mid_price'] - df['idx_px']) / df['idx_px']
     df['mark_price_rel'] = (df['mark_price'] - df['idx_px']) / df['idx_px']
@@ -46,25 +48,50 @@ def main():
     
 
     df['datetime'] = pd.to_datetime(df['time'], format='%y-%m-%d %H:%M', utc=True)
-    df['timestamp'] = df['datetime'].apply(datetime.timestamp)
+    df['timestamp'] = df['datetime'].apply(datetime.datetime.timestamp)
 
     from_date = df['timestamp'].min()
     to_date = df['timestamp'].max()
 
-    print(f"Date range: {datetime.fromtimestamp(from_date)} -- {datetime.fromtimestamp(to_date)}")
+    print(f"Date range: {datetime.datetime.fromtimestamp(from_date)} -- {datetime.datetime.fromtimestamp(to_date)}")
 
     # print("\nPremium summary (in bps):")
     # print(1e4 * df[['mark_price_rel', 'avg_long_slip', 'avg_short_slip', '100klots_long_slip', '100klots_short_slip']].describe())
     q = [0.01, 0.05, 0.10, 0.20, 0.25, 0.4, 0.5, 0.6, 0.7, 0.75, 0.8, 0.9, 0.95, 0.99]
     
-    print("\nPrice impact summary:")
-    pi_col = [c for c in df.columns if re.search(f"^{INDEX}{QUOTE}_price_impact", c)]
+    
+    # pi_col = [c for c in df.columns if re.search(f"^{INDEX}{QUOTE}_price_impact", c)]
+    pi_col = [x for x in df.columns if re.search('^perp_price', x)]
+    dg = pd.DataFrame(columns=["exchange", "daterange", "long/short", f"trade size({INDEX}", "mean(bps)", "min", "max", "variance", "nobs"])
+    exchange = "D8X"
+    daterange = str([datetime.date.fromtimestamp(from_date), datetime.date.fromtimestamp(to_date)])
     if len(pi_col) > 0:
-        x = df[pi_col[0]].values
-        v = np.quantile(x, q)
-        print("\n".join([f"{100*_q:.1f}%: {1e4 *_v: .4f} bps" for _q, _v in zip(q,v)]))
-        print(f"mean +- stddev: {np.nanmean(1e4 * x)} +- {np.nanstd(1e4 * x)} (bps)")
-        
+        for col in pi_col: 
+        # for col in [pi_col[0], pi_col[-1]]: 
+            x = 1e4 * np.abs(df[col].values)
+            v = np.quantile(x, q)
+            pos = float(re.sub("^perp_price_", "", col))
+            print(f"\nPrice impact summary: {col} {INDEX}")
+            print(f"min/max: {np.nanmin(x)} / {np.nanmax(x)} (bps)")
+            print("\n".join([f"{100*_q:.1f}%: {_v: .4f} bps" for _q, _v in zip(q,v)]))
+            print(f"mean +- stddev: {np.nanmean(x)} +- {np.nanstd(x)} (bps)")
+            dg.loc[dg.shape[0]] = {
+                "exchange": exchange,
+                "daterange": daterange,
+                "long/short": "long" if pos > 0 else "short",
+                f"trade size({INDEX}": pos,
+                "mean(bps)": np.abs(np.nanmean(x)),
+                "min": np.abs(np.nanmin(x)),
+                "max": np.abs(np.nanmax(x)),
+                "variance": np.abs(np.nanvar(x)),
+                "nobs": x.shape[0],
+            }
+        # dg["exchange"] = "D8X"
+        # dg["daterange"] = str([datetime.date.fromtimestamp(from_date), datetime.date.fromtimestamp(to_date)])
+        print(dg.head())
+        print(dg.tail())
+        slip_file = re.sub(".csv", "-slippage_stats.csv", file)
+        dg.to_csv(slip_file, index=False)
     # x = (df['100klots_long_slip'].abs() + df['100klots_short_slip'].abs()).values
     # q = [0.01, 0.05, 0.25, 0.5, 0.6, 0.7, 0.8, 0.9, 0.95]
     # v = np.quantile(x, q)
@@ -121,7 +148,7 @@ def plot_amm_funds(ax, df):
 
     ax.grid(linestyle='--', linewidth=1)
     ax.set(xlabel="Time", ylabel=COLL)
-    ax.xaxis.set_major_formatter(mdates.DateFormatter('%y-%m-%d'))
+    ax.xaxis.set_major_formatter(mdates.DateFormatter('%y-%m-%d %H-%M'))
     
     box = ax.get_position()
     ax.set_position([box.x0, box.y0, box.width * 0.8, box.height])
@@ -142,7 +169,7 @@ def plot_perp_funds(ax, df):
     ax.plot(df['datetime'], df['perp_margin'], '-', color="purple", label='AMM margin')
 
     ax.set(xlabel="Time", ylabel=COLL)
-    ax.xaxis.set_major_formatter(mdates.DateFormatter('%y-%m-%d'))
+    ax.xaxis.set_major_formatter(mdates.DateFormatter('%y-%m-%d %H-%M'))
 
     # ax.legend()
     box = ax.get_position()
@@ -164,7 +191,7 @@ def plot_price_premia(ax, df):
     # box = ax.get_position()
     # ax.set_position([box.x0, box.y0, box.width * 0.8, box.height])
     # ax.legend(loc='center left', bbox_to_anchor=(1, 0.5))
-    ax.xaxis.set_major_formatter(mdates.DateFormatter('%y-%m-%d'))
+    ax.xaxis.set_major_formatter(mdates.DateFormatter('%y-%m-%d %H-%M'))
 
 def plot_perp_slippage(ax, df):
     # perp_params = load_perp_params(f"{INDEX}{QUOTE}", COLL)
@@ -195,11 +222,14 @@ def plot_perp_slippage(ax, df):
     # ax.plot(df['datetime'], df['100klots_short_slip'].rolling(24 * 60).mean()*1e4, '-', alpha=0.6, color='purple')
     
     slippage = [x for x in df.columns if re.search('^perp_price', x)]
+    slippage = [slippage[0], slippage[5], slippage[10], slippage[-11], slippage[-6], slippage[-1]]
     # print(perp_pnls)
     color = iter(cm.rainbow(np.linspace(0, 1, len(slippage))))
-    for p in slippage:
+    for i, p in enumerate(slippage):
+        if i % 4 != 0:
+            next
         c = next(color)
-        print(p)
+        # print(p)
         ax.plot(df['datetime'], 1e4 * df[p], c=c, label=re.sub("perp_price_", "", p))
     # ax.legend()
     # box = ax.get_position()
@@ -239,7 +269,7 @@ def plot_num_traders(ax, df):
     ax.set(xlabel="Time", ylabel="Number of traders")
     ax.legend()
     ax.grid(linestyle='--', linewidth=1)
-    ax.xaxis.set_major_formatter(mdates.DateFormatter('%y-%m-%d'))
+    ax.xaxis.set_major_formatter(mdates.DateFormatter('%y-%m-%d %H-%M'))
 
 
 def plot_prices(ax, df):
@@ -247,7 +277,7 @@ def plot_prices(ax, df):
     ax.plot(df['datetime'], df['mark_price'], 'r:', label="Mark price")
     ax.set(xlabel="Time", ylabel=f"{INDEX}/{QUOTE}")
     ax.grid(linestyle='--', linewidth=1)
-    ax.xaxis.set_major_formatter(mdates.DateFormatter('%y-%m-%d'))
+    ax.xaxis.set_major_formatter(mdates.DateFormatter('%y-%m-%d %H-%M'))
     box = ax.get_position()
     ax.set_position([box.x0, box.y0, box.width * 0.8, box.height])
     ax.legend(loc='center left', bbox_to_anchor=(1, 0.5))
@@ -260,7 +290,7 @@ def plot_pnl(ax, df):
     color = iter(cm.rainbow(np.linspace(0, 1, len(perp_pnls))))
     for p in perp_pnls:
         c = next(color)
-        print(p)
+        # print(p)
         ax.plot(df['datetime'], df[p], c=c, label=p)
     # ax.legend()
     box = ax.get_position()
@@ -269,7 +299,7 @@ def plot_pnl(ax, df):
     
     ax.set(xlabel="Time", ylabel=f"{COLL}")
     ax.grid(linestyle='--', linewidth=1)
-    ax.xaxis.set_major_formatter(mdates.DateFormatter('%y-%m-%d'))
+    ax.xaxis.set_major_formatter(mdates.DateFormatter('%y-%m-%d %H-%M'))
     
 def plot_earnings(ax, df):
     ax.plot(df['datetime'], (df['staker_cash']), 'b-', label='Lp')
@@ -279,7 +309,7 @@ def plot_earnings(ax, df):
     ax.set(xlabel="Time", ylabel=f"{COLL}")
     ax.grid(linestyle='--', linewidth=1)
     ax.legend()
-    ax.xaxis.set_major_formatter(mdates.DateFormatter('%y-%m-%d'))
+    ax.xaxis.set_major_formatter(mdates.DateFormatter('%y-%m-%d %H-%M'))
     
 def plot_analysis(df, file=None):
     print(f"Index: {INDEX}, Quote: {QUOTE}, Collateral: {COLL}")
@@ -325,7 +355,7 @@ def plot_analysis(df, file=None):
     axs[0,0].set(xlabel="Time", ylabel=f"%")
     axs[0,0].grid(linestyle='--', linewidth=1)
     axs[0,0].legend()
-    axs[0,0].xaxis.set_major_formatter(mdates.DateFormatter('%y-%m-%d'))
+    axs[0,0].xaxis.set_major_formatter(mdates.DateFormatter('%y-%m-%d %H-%M'))
     
   
     plot_earnings(axs[1,0], df[mask])

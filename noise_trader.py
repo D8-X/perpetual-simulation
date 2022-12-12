@@ -24,7 +24,7 @@ class NoiseTrader(Trader):
         self.time_last_trade = -self.holding_period_blocks
         self.time_last_pnl_check = -self.holding_period_blocks
         # slippage tolerance: 0.5%-2%
-        self.slippage_tol  = np.random.uniform(0.0050, 0.0200)
+        self.slippage_tol  = np.random.uniform(0.0005, 0.0075)
         
         # when to close?
         self.cash_to_open_cc = 0 # to track pnl
