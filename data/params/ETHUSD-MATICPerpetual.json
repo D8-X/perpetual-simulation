@@ -26,11 +26,11 @@
   "fDFCoverNRate": 0.05,
   "fDFLambda": [
     0.9995,
-    0.95
+    0.97
   ],
   "fAMMTargetDD": [-3.719016482, -3.4316144],
   "fAMMMinSizeCC": 125000,
-  "fMinimalTraderExposureEMA": 40,
+  "fMinimalTraderExposureEMA": 30,
   "fMinimalAMMExposureEMA": 60,
   "fMaximalTradeSizeBumpUp": 10,
   "baseCurrency": "ETH",

@@ -26,10 +26,10 @@
   "fDFCoverNRate": 0.05,
   "fDFLambda": [
     0.9995,
-    0.97
+    0.98
   ],
   "fAMMTargetDD": [-3.4316144, -2.87816174],
-  "fAMMMinSizeCC": 30000,
+  "fAMMMinSizeCC": 35000,
   "fMinimalTraderExposureEMA": 35000,
   "fMinimalAMMExposureEMA": 50000,
   "fMaximalTradeSizeBumpUp": 10,
