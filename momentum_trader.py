@@ -32,6 +32,13 @@ class MomentumTrader(Trader):
         super().query_trade_amount()
         if not self.is_active:
             return (0, False)
+        
+        if self.cash_cc < 0:
+            if self.position_bc != 0:
+                print(f"{self.__name__} should have been liquidated! position:{self.position_bc}, cash={self.cash_cc}.")
+            return (0, False)
+        
+        
 
         perp = self.amm.get_perpetual(self.perp_idx)
         self.EMA = self.alpha * perp.get_index_price() + (1 - self.alpha) * self.EMA
@@ -51,12 +58,11 @@ class MomentumTrader(Trader):
         # the price deviates from the EMA
             if self.position_bc == 0:
                 # no open position -> try to open one
-                # pos = self.get_max_trade_amount(np.sign(indicator))
                 pos = np.sign(indicator) * perp.get_max_leverage_position(self)
-                pos = perp.scale_to_max_signed_trader_position(pos)
-                if not self.is_below_max_deviation(pos, self.slippage_tol):
-                    return (0, False)
-                return (pos, False)
+                pos = perp.scale_to_max_signed_trader_position(pos) * 0.99
+                if self.is_below_max_deviation(pos, self.slippage_tol):
+                    return (pos, False)
+                return (0, False)
             else:
                 # there is an open position
                 if self.position_bc * indicator < 0:
@@ -65,11 +71,4 @@ class MomentumTrader(Trader):
                         return (0, False)
                     return (-self.position_bc, True)
                 return (0, False)
-            
-    def get_max_trade_amount(self, dir):
-        perp = self.amm.get_perpetual(self.perp_idx)
-        max_lvg_pos = dir * perp.get_max_leverage_position(self)
-        max_trade_size = perp.get_max_signed_trade_size_for_position(self.position_bc, max_lvg_pos) * 0.99
-        trade_amount = dir * np.min((np.abs(max_lvg_pos), np.abs(max_trade_size)))
-        return trade_amount
-       
+               

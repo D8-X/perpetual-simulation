@@ -1,0 +1,41 @@
+{
+  "fInitialMarginRate": 0.05,
+  "fMaintenanceMarginRate": 0.03,
+  "fTreasuryFeeRate": 0.000075,
+  "fPnLPartRate": 0.000025,
+  "fReferralRebateCC": 0.01,
+  "fLiquidationPenaltyRate": 0.01,
+  "fMinimalSpread": 0.0002,
+  "fIncentiveSpread": 0.0001,
+  "fLotSizeBC": 0.001,
+  "fFundingRateClamp": 0.0005,
+  "fMarkPriceEMALambda": 0.7,
+  "fSigma2": 0.04,
+  "fSigma3": 0,
+  "fRho23": 0,
+  "eCollateralCurrency": "QUOTE",
+  "fStressReturnS2": [
+    -0.05,
+    0.05
+  ],
+  "fStressReturnS3": [
+    0,
+    0
+  ],
+  "fDFCoverNRate": 0.05,
+  "fDFLambda": [
+    0.9995,
+    0.5
+  ],
+  "fAMMTargetDD": [
+    -3.719016,
+    -3.352795
+  ],
+  "fAMMMinSizeCC": 112000,
+  "fMinimalTraderExposureEMA": 45,
+  "fMinimalAMMExposureEMA": 112,
+  "fMaximalTradeSizeBumpUp": 2.5,
+  "baseCurrency": "XAU",
+  "quoteCurrency": "USD",
+  "collateralCurrency": "USD"
+}

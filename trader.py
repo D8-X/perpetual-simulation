@@ -29,18 +29,21 @@ class Trader(ABC):
         self.slippage_tol = 0.05
         self.id = Trader._counter
         self.is_best_tier = is_best_tier
+        self.pnl_cc = 0
         Trader._counter += 1
         self.amm.trader_dir.append(self)
 
-    @abstractmethod
     def query_trade_amount(self) -> "tuple[float, bool]":
         """ Query how much the trader would trade given the current market."""
+        if self.cash_cc <= 0:
+            self.set_active_status(False)
+            return
         # parent generically checks if trader is bankrupt, actual trade amounts must be determined by derived classes
         perp = self.amm.get_perpetual(self.perp_idx)
         if self.position_bc == 0:
             # no open position: bankrupt == not enough cash to open a position at mark and max leverage
             lev_cash_bc = self.cash_cc / perp.get_base_to_collateral_conversion(is_mark_price=True) / perp.params['fInitialMarginRate']
-            if lev_cash_bc <= perp.min_num_lots_per_pos * perp.params['fLotSizeBC']:
+            if lev_cash_bc < perp.min_num_lots_per_pos * perp.params['fLotSizeBC'] or self.cash_cc < 0:
                 # strict because slippage exists
                 self.set_active_status(False)
         # logic for existing position should be implemented: if trader doesn't close in time she is liquidated
@@ -59,14 +62,20 @@ class Trader(ABC):
         return amountUSD * fx_q2c
 
     def pay_funding(self):
+        c0 = self.cash_cc
         perp = self.get_perpetual()
         perp.pay_funding(self)
+        self.pnl_cc += self.cash_cc - c0
 
-    def notify_liquidation(self, liq_amount_bc : float, px : float, penalty : float):
-        pass
+    def notify_liquidation(self, liq_amount_bc : float, px : float, cost_cc : float):
+        self.pnl_cc -= cost_cc
 
     def trade(self, dPos, is_close):
+        c0 = self.cash_cc
         px = self.amm.trade_with_amm(self, dPos, is_close)
+        
+        if px:
+            self.pnl_cc += self.cash_cc - c0
         return px
 
     def get_margin_balance_cc(self, perpetual : 'Perpetual', at_mark=True) -> float:

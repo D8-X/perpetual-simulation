@@ -1,6 +1,7 @@
 */*.pyc
 *.pkl
-results/res*.csv
+results/res*
+results/sim_*.csv
 *.aux
 *.bbl
 *.blg

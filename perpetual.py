@@ -4,7 +4,6 @@
 # Perpetual class
 #
 
-from email.mime import base
 import numpy as np
 from trader import CollateralCurrency, Trader
 from amm_trader import AMMTrader
@@ -27,7 +26,8 @@ class Perpetual:
                  min_spread=0.00025,
                  incentive_spread=0,
                  max_position=np.inf,
-                 verbose=0):
+                 verbose=0, 
+                 symbol=""):
         """[summary]
 
         Args:
@@ -50,6 +50,7 @@ class Perpetual:
         self.idx_s2 = idx_s2
         self.verbose = verbose
         self.params = params
+        self.symbol = symbol
         # reuse s2 if collateral ccy == base ccy
         if cc is CollateralCurrency.BASE:
             # print(
@@ -89,7 +90,7 @@ class Perpetual:
         elif incentive_spread < 0:
             raise ValueError("Incentive rate should be non-negative")
         self.mark_price_history = np.zeros((3,))
-        self.max_idx_slippage = 0.05 # 5.13%
+        self.max_idx_slippage = 0.50 # 50%
         self.my_idx = my_idx
         self.amm_trader = AMMTrader(amm, my_idx, cc, initial_margin_cash, lot_bc=params['fLotSizeBC'])
         self.current_time = amm.current_time
@@ -97,14 +98,15 @@ class Perpetual:
         self.total_volume_qc = 0 # notional traded in quote currency
         self.total_volume_cc = 0 # notional traded in quote currency
         self.open_interest = 0
-        self.amm_pool_target_size = params['fAMMMinSizeCC']
-        self.default_fund_target_size = params['fAMMMinSizeCC']
+        self.amm_pool_target_size = self.amm_pool_cash_cc
+        self.default_fund_target_size = self.amm_pool_cash_cc
         self.current_AMM_exposure_EMA = np.array([1.0, 1.0]) * params['fMinimalAMMExposureEMA']
         self.current_trader_exposure_EMA = params['fMinimalTraderExposureEMA']
         self.current_locked_in_value_EMA = [-params['fMinimalAMMExposureEMA'], params['fMinimalAMMExposureEMA']]
         self.trader_status = dict()
         self.max_position = max_position
         self.min_num_lots_per_pos = 10
+        self.last_df_transfer = amm.get_timestamp()
 
     def inc_time(self):
         # move the EMA of the premium forward
@@ -120,12 +122,15 @@ class Perpetual:
         self.idx_s2[time_idx] = s2
 
     def pay_funding(self, trader):
+        # self.rebalance_perpetual()
         rate = self.get_funding_rate()
         coupon_abs = rate * np.abs(trader.position_bc)
         if coupon_abs == 0:
             return
         fxb2c = self.get_base_to_collateral_conversion(False)
         coupon = np.sign(trader.position_bc) * coupon_abs * fxb2c
+        if coupon > trader.cash_cc:
+            coupon = trader.cash_cc
         trader.cash_cc -= coupon
         self.transfer_cash_to_margin(coupon)
 
@@ -210,10 +215,15 @@ class Perpetual:
         max_signed_trade_amount = np.sign(max_position - position) * np.min(
             (np.abs(max_position - position), self.get_absolute_max_trade_size()))
         k_star = self.get_Kstar()
+        # if not exceeds_cap and (
+        #     (
+        #         (max_signed_trade_amount > 0 and 2*k_star > max_signed_trade_amount) or 
+        #         (max_signed_trade_amount < 0 and 2*k_star < max_signed_trade_amount))
+        # ):
         if not exceeds_cap and (
             (
-                (max_signed_trade_amount > 0 and 2*k_star > max_signed_trade_amount) or 
-                (max_signed_trade_amount < 0 and 2*k_star < max_signed_trade_amount))
+                (max_signed_trade_amount > 0 and k_star >= max_signed_trade_amount) or 
+                (max_signed_trade_amount < 0 and k_star <= max_signed_trade_amount))
         ):
             max_signed_trade_amount = 2*k_star   
         res = self.my_amm.shrink_to_lot(max_signed_trade_amount, self.params['fLotSizeBC'])
@@ -222,10 +232,19 @@ class Perpetual:
         return res
 
     def scale_to_max_signed_trader_position(self, pos):
+        """Scales position down to meet AMM max-position size constraints
+
+        Args:
+            pos (number): position to scale
+
+        Returns:
+            number: down-scaled position
+        """
         max_signed_size = self.get_max_signed_trade_size_for_position(0, pos)
         # scale down
         abs_pos = np.min((np.abs(pos), np.abs(max_signed_size)))
-        pos = self.my_amm.shrink_to_lot(abs_pos if pos > 0 else -abs_pos, self.params['fLotSizeBC'])
+        pos = self.my_amm.shrink_to_lot(abs_pos, self.params['fLotSizeBC'])  * (1 if pos > 0 else -1)
+        # if below absolute min, then it's just zero
         if np.abs(pos) < self.min_num_lots_per_pos * self.params['fLotSizeBC']:
             pos = 0
         return pos
@@ -242,7 +261,7 @@ class Perpetual:
         
         staker_cash_cc = self.get_pricing_staked_cash_for_perp()
         # combine with protocol owned cash
-        pricing_cash_cc = self.amm_pool_cash_cc + staker_cash_cc
+        pricing_cash_cc = self.amm_pool_cash_cc + staker_cash_cc + self.amm_trader.cash_cc
         # assign according to collateral type
         if self.collateral_currency is CollateralCurrency.BASE:
             M1, M3 = 0, 0
@@ -277,11 +296,12 @@ class Perpetual:
         return k_star
 
     def get_funding_rate(self):
+        # return 0
         time_idx = np.min((self.current_time, self.premium_rate.shape[0] - 1))
         premium_rate = self.premium_rate[time_idx]
         c = self.params['fFundingRateClamp']
-        rate = np.max((premium_rate, c)) + \
-            np.min((premium_rate, -c)) + np.sign(-self.amm_trader.position_bc)*0.0001
+        K2 = -self.amm_trader.position_bc
+        rate = np.max((premium_rate, c)) + np.min((premium_rate, -c)) + np.sign(K2)*0.0001
         rate = rate * self.glbl_params['block_time_sec']/(8*60*60)
         max_rate = (self.params['fInitialMarginRate']-
                     self.params['fMaintenanceMarginRate'])*0.9
@@ -326,7 +346,7 @@ class Perpetual:
         self.amm_trader.cash_cc += amount_cc
         self.my_amm.earnings[self.my_idx] += amount_cc
 
-    def rebalance_perpetual(self):
+    def rebalance_perpetual(self, rebalance_another=True):
         """Rebalance margin of the perpetual to initial margin
         """
         # excess/defect in the amm's margin account
@@ -335,8 +355,11 @@ class Perpetual:
         self.my_amm.increment_pricing_staker_cash()
         amt_df = 0
 
-        if rebalance_amnt_cc > 0:
+        if rebalance_amnt_cc > 0: # and self.amm_trader.cash_cc > 0:
             # transfer From AMM Margin To Pool
+            # if rebalance_amnt_cc > self.amm_trader.cash_cc:
+            #     # can't transfer more than what's available
+            #     rebalance_amnt_cc = self.amm_trader.cash_cc
             (amount_staker, amount_amm) = self.__split_amount(rebalance_amnt_cc, False)
             self.amm_trader.cash_cc = self.amm_trader.cash_cc - rebalance_amnt_cc
             assert(amount_staker == 0 or self.my_amm.staker_cash_cc > 0)
@@ -352,7 +375,7 @@ class Perpetual:
                 (self.my_amm.staker_cash_cc + self.amm_pool_cash_cc)
             if(amt > max_amount):
                 print(
-                    f"WARNING: Borrowing {amt-max_amount:.4f} from default fund to cover AMM trader margin. AMM min size too low?")
+                    f"WARNING: {self.symbol} Borrowing {amt-max_amount:.4f} from default fund to cover AMM trader margin. AMM min size too low?")
                 # not enough funds, draw from default fund:
                 # amount to withdraw from default fund
                 amt_df = amt - max_amount
@@ -372,8 +395,14 @@ class Perpetual:
             # update margin
             feasible_mgn = amt_df + amt
             self.amm_trader.cash_cc += feasible_mgn
+            # if self.amm_trader.cash_cc < 0:
+            #     print(self.__dict__)
         self.rebalance_amm()
         self.update_mark_price()
+        # rebalance another perp randomly
+        if rebalance_another:
+            other_perp_idx = np.random.randint(0, len(self.my_amm.perpetual_list))
+            self.my_amm.perpetual_list[other_perp_idx].rebalance_perpetual(rebalance_another=False)
 
     def rebalance_amm(self):
         """
@@ -386,76 +415,56 @@ class Perpetual:
         # if we are above baseline target, we do nothing, make sure we know that's the target
         baseline_target_size = self.get_amm_pool_size_for_dd(
             self.params['fAMMTargetDD'][0])
-        stress_target_size = self.get_amm_pool_size_for_dd(
-            self.params['fAMMTargetDD'][1])
-
-        # correct baseline target in case DF needs cash
-        df_gap_ratio = self.my_amm.get_default_fund_gap_to_target_ratio()
-        if df_gap_ratio < 1:
-            baseline_target_size = stress_target_size + (baseline_target_size - stress_target_size) * df_gap_ratio
         
-        if baseline_target_size < self.amm_pool_cash_cc:
-            # adverse_dir = -np.sign(self.get_Kstar())
-            # pos = self.current_trader_exposure_EMA * adverse_dir
-            # # PD after an adverse position of average size
-            # pd = self.get_pd(pos, self.get_index_price())
-            # pd_target = norm.cdf(self.glbl_params['amm_stress_target_dd'])
-            # if pd < pd_target:
-            #     return
-            #     print(f"DANGER!!!\n----------\nBelow baseline target but not above target pd!!\n{100*pd:.2f}% < {100*pd_target:.2f}%")
-            self.amm_pool_target_size = baseline_target_size
-            return
-        # we are below baseline target, two options
-        # 1 - we are still above stress target. we set new target to baseline, and do nothing after that.
-        #   a. DF was not touched here.
-        #   b. when cash is distributed, AMM will appear to have a gap, so it will get priority.
-        #       - DF is used only if AMM is still not full after collecting fees/positive AMM trader balance.
-        #   c. This continues until AMM goes over baseline, at which point all fees start going to DF.
-        #   d. In terms of premium: we allow higher premium and then let cash flow to the AMM until it drops below the tighter threshold,
-        #       then cash starts flowing back into DF
-        # 2 - we are below stress target. we set new target to stress, and draw from DF to get there.
-        #   a. DF was used here.
-        #   b. when cash is distributed, AMM will appear full (assuming we had enough DF to cover it here), so DF will be replenished
-        #   c. In terms of premium, we don't allow a higher premium so we give AMM all it needs from DF now.
-        #       Because DF was used, we keep the stress threshold and give cash to the DF in the next distribution.
-        #       Then when we're back here we do nothing but the threshold will be set to baseline so premium will decrease.
-        # exceptional case: even after setting AMM target to stress target (which is lower), we still don't meet the threshold
-        # then either:
-        #  1 - we are above minimal amount (so that PD < 1 but still large)
-        #  2 - we are below, which is emergency and we're done
-        # both are emergencies currently in the code below
+        is_baseline_target = baseline_target_size <= self.amm_pool_cash_cc
         
-
-        if stress_target_size < self.amm_pool_cash_cc:
-            # adverse_dir = -np.sign(self.get_Kstar())
-            # pos = self.current_trader_exposure_EMA * adverse_dir
-            # PD after an adverse position of average size
-            # pd = self.get_pd(pos, self.get_index_price())
-            # pd_target = norm.cdf(self.glbl_params['amm_stress_target_dd'])
-            # if pd < pd_target:
-            #     return
-            #     print(f"DANGER!!!\n----------\nBelow stress target but not above target pd!!\n{100*pd:.2f}% < {100*pd_target:.2f}%")
+        stress_target_size = self.get_amm_pool_size_for_dd(self.params['fAMMTargetDD'][1])
+        
+        is_baseline_target = is_baseline_target or stress_target_size <= self.amm_pool_cash_cc
+        
+        if is_baseline_target:
+            # adjust baseline target in case DF needs cash
+            df_gap_ratio = self.my_amm.get_default_fund_gap_to_target_ratio()
+            if df_gap_ratio < 1:
+                baseline_target_size = stress_target_size + (baseline_target_size - stress_target_size) * df_gap_ratio
             self.amm_pool_target_size = baseline_target_size
+            self.last_df_transfer = 0
             return
-
+        
+        if self.last_df_transfer == 0:
+            self.last_df_transfer = self.my_amm.get_timestamp()
+            
+        # we are here so amm_pool_target_size < stress_target_size
         self.amm_pool_target_size = stress_target_size
         # draw funds in relation to available size from default fund
         # If default fund is funded at rate r we withdraw at most min(1, r%) from it
-        gap = stress_target_size - self.amm_pool_cash_cc
-        fill_rate = np.min(
-            (0.5, self.my_amm.get_default_fund_gap_to_target_ratio())
-        )
+        gap = 0.75*(stress_target_size - self.amm_pool_cash_cc)
+        # assert(gap > 0)
+        if gap <= 0:
+            return
+        
         gap_fill_df = np.min(
-            (gap, fill_rate * self.my_amm.default_fund_cash_cc)
+            (gap, 0.75 * self.my_amm.default_fund_cash_cc)
         )
-        # draw funds from pnl participants who don't otherwise contribute to
-        # the default fund
-        gap = gap - gap_fill_df
-        gap_fill_staker = 0 # set to zero, pnl participants now participate in pricing
-      
-        self.my_amm.default_fund_cash_cc -= gap_fill_df
+        
+        gap_fill_df_adjusted = self.my_amm.transfer_from_df_to_amm(self, gap_fill_df, stress_target_size)
+        
+        
+        # draw funds from pnl participants who don't otherwise contribute to the default fund
+        if gap_fill_df > 0:
+            # proportionally contributes the same as the df
+            gap = np.max((0, gap - gap_fill_df)) * (gap_fill_df_adjusted / gap_fill_df)
+        else:
+            gap = 0
+        
+        gap_fill_staker = np.min(
+            (gap, 0.75 * self.my_amm.staker_cash_cc)
+        )
+        
+        # self.my_amm.default_fund_cash_cc -= gap_fill_df
         self.my_amm.staker_cash_cc -= gap_fill_staker
-        self.amm_pool_cash_cc += gap_fill_df + gap_fill_staker
+        self.amm_pool_cash_cc += gap_fill_staker
+        # self.amm_pool_cash_cc += gap_fill_df + gap_fill_staker
 
 
     def get_amm_pool_size_for_dd(self, dd):
@@ -509,8 +518,8 @@ class Perpetual:
 
         # account for staker cash
         staker_cash_cc = self.get_pricing_staked_cash_for_perp()
-        # want amm fund + staker_cash >= target, so we decrease target by staker cash
-        size_0 -= staker_cash_cc
+        # M =  amm fund + amm margin + staker_cash >= target, and this target is for amm fund, so:
+        size_0 = size_0 - staker_cash_cc - self.amm_trader.cash_cc
         # target should be non-negative
         size_0 = np.max((0, size_0))
         # size_0 = np.max((size_0, self.params['fAMMMinSizeCC']))
@@ -535,7 +544,9 @@ class Perpetual:
         Args:
             cash (float): [amount to be distributed]
         """
-        assert(cash > 0)
+        assert(cash >= 0)
+        if cash == 0:
+            return
         amm_gap = self.amm_pool_target_size - self.amm_pool_cash_cc
 
         if amm_gap > cash:
@@ -566,6 +577,9 @@ class Perpetual:
                 (self.glbl_params['ceil_staker_pnl_share'], w_staker))
         amount_staker = w_staker * amount
         amount_amm = amount - amount_staker
+        if is_withdraw:
+            amount_staker = amount_staker if amount_staker < self.my_amm.staker_cash_cc else self.my_amm.staker_cash_cc
+            amount_amm = amount_amm if amount_amm < self.amm_pool_cash_cc else self.amm_pool_cash_cc
         # test log
         # earning = amount_staker * (-1 if is_withdraw else 1)
         # print(f"Stakers earn {earning: .4f}, which is {100 * w_staker:.2f}% of the cash being distributed")
@@ -661,16 +675,41 @@ class Perpetual:
     def get_absolute_max_trade_size(self):
         return np.inf #60_000 / self.get_base_to_quote_conversion(is_mark_price=False)
 
+    def is_new_position_margin_safe(self, trader, amount_bc, price_qc):
+        # this only makes sense if this is an opening trade, closing incurs on different pnl
+        position_bc = trader.position_bc + amount_bc
+        s2 = self.get_index_price()
+        premium = amount_bc * (price_qc - s2)
+        lockedin_qc = trader.locked_in_qc + amount_bc * s2
+        fx_q2c = 1 / self.get_collateral_to_quote_conversion()
+        cash_cc = trader.cash_cc - premium * fx_q2c
+       
+        fx_b2c = self.get_base_to_collateral_conversion(True)
+        pnl_cc = position_bc * fx_b2c - lockedin_qc*fx_q2c
+        margin_balance_cc = pnl_cc + cash_cc
+        mgn_rate = self.get_initial_margin_rate(position_bc)
+        initial_margin_cc = np.abs(position_bc*fx_b2c * mgn_rate)
 
+        is_safe = margin_balance_cc >= initial_margin_cc
+        if not is_safe:
+            print(f"{trader.__class__.__name__} not initial margin safe! {margin_balance_cc} < {initial_margin_cc}")
+        return is_safe
+        
     def trade(self, trader: 'Trader', amount_bc: float, is_close_only: bool):
+        if trader.cash_cc <= 0:
+            print(f"Trade rejected:  {trader.__class__.__name__} does not have cash left: {trader.cash_cc}")
+            # can't trade without cash
+            return None
+        if np.abs(amount_bc) < self.params['fLotSizeBC']:
+            print(f"Trade rejected: {self.symbol} {trader.__class__.__name__} tried to trade less than one lot: {amount_bc} < {self.params['fLotSizeBC']}")
+            return None
         # threshold = 10
         # reject opening trade if total balance in perp exceeds threshold
         # if False and self.get_total_account_balances() > threshold and not is_close_only:
         #     print(f"BREACH: Total trader margin threshold exceeded: {self.get_total_account_balances()} > {threshold}")
         #     #return None
-
-        # if closing, either there's at least one lot left, or the entire position is closed
         new_position_bc = trader.position_bc + amount_bc
+        # if closing, either there's at least one lot left, or the entire position is closed
         if is_close_only:
             if np.abs(new_position_bc) >= self.min_num_lots_per_pos * self.params['fLotSizeBC']:
                 amount_bc = self.my_amm.round_to_lot(amount_bc, self.params['fLotSizeBC'])
@@ -678,55 +717,45 @@ class Perpetual:
             else:
                 amount_bc = -trader.position_bc
                 new_position_bc = 0
+        else:
+            amount_bc = self.my_amm.round_to_lot(amount_bc, self.params['fLotSizeBC'])
+            new_position_bc = trader.position_bc + amount_bc
+            
 
-        is_trying_to_exit = trader.position_bc != 0 and new_position_bc == 0
+        is_trying_to_exit = trader.position_bc != 0 and np.abs(new_position_bc) < self.min_num_lots_per_pos * self.params['fLotSizeBC']
         # if amount is less than one lot, revert
         if np.abs(amount_bc) < self.params['fLotSizeBC'] and not is_trying_to_exit:
-            print(f"Trade rejected: trade size below lot size {np.abs(amount_bc):.4f} < {self.params['fLotSizeBC']} ({trader.__class__.__name__})")
+            print(f"Trade rejected: {self.symbol} {trader.__class__.__name__} trade below lot size {np.abs(amount_bc):.4f} < {self.params['fLotSizeBC']}")
             return None
         
 
         # if resulting position is smaller than minimal size, revert
         if new_position_bc != 0 and np.abs(new_position_bc) < self.min_num_lots_per_pos * self.params['fLotSizeBC'] and not is_trying_to_exit:
-            print(f"Trade rejected: resulting position below minimal size {np.abs(new_position_bc):.6f} < {self.min_num_lots_per_pos * self.params['fLotSizeBC']} ({trader.__class__.__name__})")
+            print(f"Trade rejected: {self.symbol} {trader.__class__.__name__} resulting position below minimal size {np.abs(new_position_bc):.6f} < {self.min_num_lots_per_pos * self.params['fLotSizeBC']}")
             return None
-        # protocol_funds_before = self.my_amm.get_total_protocol_cash()
         self.rebalance_perpetual()
-        # protocol_funds_after = self.my_amm.get_total_protocol_cash()
-        # if protocol_funds_before != protocol_funds_after:
-        #     print(f"protocol_funds_before={protocol_funds_before}")
-        #     print(f"protocol_funds_after={protocol_funds_after}")
-        df_gap = self.my_amm.get_default_fund_gap_to_target_ratio()
         px = self.get_price(amount_bc)
-        assert(px > 0)
+        if px <= 0:
+            print(f"Trade rejected: {self.symbol} {trader.__class__.__name__} price for amount {amount_bc} is undefined")
+        
+        is_opening = (new_position_bc > trader.position_bc and trader.position_bc >= 0) or (new_position_bc < trader.position_bc and trader.position_bc <= 0)
+        if is_opening and not self.is_new_position_margin_safe(trader, amount_bc, px):
+            print(f"Trade rejected: {self.symbol} {trader.__class__.__name__} not enough margin")
+            return None
 
         k_star = self.get_Kstar()
         is_direction_adverse = amount_bc * k_star <= 0
         
-
-        # if np.abs(new_position_bc) > self.max_position:
-        #     print(f"Large position: |{new_position_bc: .4f}| > {self.max_position}, @{px:.1f}, k*={k_star: .4f} ({trader.__class__.__name__} {trader.id})")
-
         # adverse trades are canceled if too large or too much slippage
         if is_direction_adverse:
             max_trade_size = self.get_max_signed_trade_size_for_position(trader.position_bc, amount_bc)
             
             if np.abs(amount_bc) > np.abs(max_trade_size) and not is_trying_to_exit:
-                if self.verbose > 0:
-                    action_msg = f"{'fully' if is_trying_to_exit else ''} close" if is_close_only else "open"
-                    msg = f"{trader.__class__.__name__} was trying to {action_msg} a trade"
-                    print(f"Trade rejected: trade size violation {np.abs(amount_bc):.4f} > {np.abs(max_trade_size):.4f} ({msg})")
+                action_msg = f"{'fully' if is_trying_to_exit else ''} close" if is_close_only else "open"
+                msg = f"{trader.__class__.__name__} was trying to {action_msg} a trade"
+                print(f"Trade rejected: {self.symbol} trade size violation {np.abs(amount_bc):.4f} > {np.abs(max_trade_size):.4f} ({msg})")
                 return None
-            # if more than index-slippage, don't trade unless they are trying to exit
-            if np.abs(np.log(px)-np.log(self.get_index_price())) > self.max_idx_slippage and not is_trying_to_exit:
-                if self.verbose > 0:
-                    print(f"Trade rejected: slippage violation {np.abs(np.log(px)-np.log(self.get_index_price())):.4f} > {self.max_idx_slippage:.4f} ({trader.__class__.__name__})")
-                return None
-
-        # if self.verbose > 0 and (is_direction_adverse or trader.__class__.__name__ == 'ArbTrader') and np.abs(amount_bc) > self.current_trader_exposure_EMA:
-        #     msg = f"{amount_bc:.3f}@{px:.1f}, k_ema={self.current_trader_exposure_EMA:.3f} ({trader.__class__.__name__} {trader.id})"
-        #     print(f"Large trade: Accepted a large trade {'in adverse direction' if is_direction_adverse else ''}: {msg}")
-
+           
         # trade with AMM:
         (delta_cash, is_open) = self.book_trade_with_amm(
             trader, px, amount_bc, is_close_only)
@@ -778,7 +807,7 @@ class Perpetual:
                 df_max_withdrawal = -gap_df
                 amm_pool_contribution = np.min((gap_amm_after_fee, df_max_withdrawal))
 
-        assert(self.my_amm.default_fund_cash_cc >= 0)
+        # assert(self.my_amm.default_fund_cash_cc >= 0)
         # distribute amounts
         trader.cash_cc = trader.cash_cc - total_fee
         assert(staker_fee >= 0)
@@ -831,9 +860,7 @@ class Perpetual:
         if is_close_only:
             max_amount = np.abs(trader.position_bc)
             assert(np.abs(amount_bc) <= max_amount)
-        self.total_volume_bc += np.abs(amount_bc)
-        self.total_volume_qc += np.abs(amount_bc) * self.get_index_price()
-        self.total_volume_cc += np.abs(amount_bc) * self.get_base_to_collateral_conversion(False)
+
         # is_close = trader.position_bc != 0 and np.sign(trader.position_bc) != np.sign(amount_bc)
         new_pos_bc = trader.position_bc + amount_bc
         is_close = (
@@ -857,10 +884,16 @@ class Perpetual:
         assert(not np.isnan(amount_bc))
         self.updateMargin(trader, amount_bc, delta_cash,
                           delta_locked_value)
+        self.total_volume_bc += np.abs(amount_bc)
+        self.total_volume_qc += np.abs(amount_bc) * self.get_index_price()
+        self.total_volume_cc += np.abs(amount_bc) * self.get_base_to_collateral_conversion(False)
         # update average trade sizes for AMM pool and default fund
         # only account for opening trades
         if(not is_close):
-            self.__update_exposure_ema(amount_bc)
+            # if self.symbol == 'ETHUSD-MATIC' and trader.position_bc > 100:
+            #     print(trader.__class__.__name__)
+            #     print(vars(trader))
+            self.__update_exposure_ema(trader.position_bc)
         # at this point the trade was successful: gas fees are paid from the amm margin account
         self.transfer_cash_to_margin(-GAS_FEE)
         return (delta_cash, is_close)
@@ -869,6 +902,10 @@ class Perpetual:
         assert(not np.isnan(delta_locked_value))
         assert(not np.isnan(delta_cash))
         assert(not np.isnan(amount_bc))
+        if not trader is AMMTrader and trader.cash_cc + delta_cash < 0:
+            # the trader can't lose more than he owns so the cash delta is capped
+            # (this is probably a liquidation)
+            delta_cash = -trader.cash_cc
         # trader margin
         self.__updateTraderMargin(
             trader, amount_bc, delta_cash, delta_locked_value)
@@ -883,6 +920,7 @@ class Perpetual:
         trader.locked_in_qc = trader.locked_in_qc + delta_locked_value
         trader.position_bc = trader.position_bc + amount_bc
         trader.cash_cc = trader.cash_cc + delta_cash
+        # assert(not trader is AMMTrader or trader.cash_cc >= 0)
         # adjust open interest
         delta_oi = 0
         if old_pos > 0:
@@ -959,7 +997,7 @@ class Perpetual:
 
         # liquidate at mark-price
         px = self.get_mark_price()
-
+        trade_cash_before = trader.cash_cc
         (delta_cash, is_open) = self.book_trade_with_amm(
             trader, px, liq_amount_bc, True)
 
@@ -968,7 +1006,7 @@ class Perpetual:
         penalty_cc = self.get_base_to_collateral_conversion(False) * penalty_bc
         mgn = np.max((0, trader.get_margin_balance_cc(self)))
         penalty_to_trader = np.min((penalty_cc, mgn))
-        trader.notify_liquidation(liq_amount_bc, px, penalty_to_trader)
+        
 
         gap = penalty_cc - mgn
         if gap > 0:
@@ -987,6 +1025,9 @@ class Perpetual:
         self.rebalance_perpetual()
         # pay regular trading fees/rebalance AMM cash
         self.__distribute_fees(trader, liq_amount_bc)
+        
+        trade_cash_after = trader.cash_cc
+        trader.notify_liquidation(liq_amount_bc, px, np.abs(trade_cash_after - trade_cash_before))
 
         return True
 
@@ -994,6 +1035,8 @@ class Perpetual:
         # cash_cc * s3 = pos * (price - sm) + f |pos| s2 + |pos| sm / leverage
         # pos * (price - sm) = pos*(price - s2) + pos*(s2 - sm)<= |pos| * (slip  + prem) * s2)
         # --> |pos| >= cash * (s3 / s2) /  (m_r * sm/s2 + f + slip + prem )
+        if trader.cash_cc <= 0:
+            return 0
         fee_rate = 0 if trader.is_best_tier else (self.params['fTreasuryFeeRate'] + self.params['fPnLPartRate'])
         s2 = self.get_index_price()
         sm = self.get_mark_price()

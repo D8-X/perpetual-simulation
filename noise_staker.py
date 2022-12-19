@@ -10,15 +10,15 @@ class NoiseStaker(Staker):
         assert(monthly_stakes > 0 and holding_period_months > 0)
         one_month_in_seconds = (60 * 60 * 24 * 30)
         self.prob_stake_per_block = np.min((1, monthly_stakes / one_month_in_seconds * self.amm.params["block_time_sec"]))
-        self.holding_period_seconds = holding_period_months * one_month_in_seconds 
+        self.holding_period_seconds = np.random.uniform(2 * holding_period_months) * one_month_in_seconds 
         self.time_last_stake = -self.holding_period_seconds
 
         # to compute pnl
         self.initial_stake = 0
-        # stop loss at somewhere between 5% and 10% loss
-        self.stop_loss = np.random.uniform(0.10, 0.20)
-        # take profit at somewhere between 10% and 20% profit
-        self.take_profit = np.random.uniform(0.20, 0.40)
+        # stop loss at somewhere between 15% and 30% loss
+        self.stop_loss = np.random.uniform(0.15, 0.30)
+        # take profit at somewhere between 20% and 60% profit
+        self.take_profit = np.random.uniform(0.20, 0.60)
 
         
         
@@ -37,10 +37,9 @@ class NoiseStaker(Staker):
             assert(self.initial_stake > 0 and self.amm.share_token_supply > 0)
             if self.amm.get_timestamp() - self.time_last_stake > self.holding_period_seconds:
                 self.exit()
-            return
             # unstake if it's been long enough or SL/TP criteria are met
             stake_value = (self.share_tokens / self.amm.share_token_supply) * self.amm.staker_cash_cc
             pnl = stake_value / self.initial_stake -1
-            if pnl < -self.stop_loss or pnl > self.take_profit or self.amm.current_time - self.time_last_stake > self.holding_period_blocks:
+            if pnl < -self.stop_loss or pnl > self.take_profit:
                 self.exit()
     
