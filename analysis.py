@@ -7,11 +7,28 @@ import matplotlib.dates as mdates
 import datetime
 from matplotlib.pyplot import cm
 from simulation import load_perp_params
+import seaborn as sns
+from matplotlib import font_manager
+
+font_path = './inter/Inter Desktop/Inter-Regular.otf'  # Your font path goes here
+font_manager.fontManager.addfont(font_path)
+prop = font_manager.FontProperties(fname=font_path)
+
+plt.rcParams['font.family'] = 'sans-serif'
+plt.rcParams['font.sans-serif'] = prop.get_name()
+
+sns.set_style('whitegrid') # darkgrid, white grid, dark, white and ticks
+# plt.rc('axes', titlesize=18)     # fontsize of the axes title
+plt.rc('axes', labelsize=14)    # fontsize of the x and y labels
+plt.rc('xtick', labelsize=13)    # fontsize of the tick labels
+plt.rc('ytick', labelsize=13)    # fontsize of the tick labels
+plt.rc('legend', fontsize=13)    # legend fontsize
+plt.rc('font', size=13)          # controls default text sizes
 
 COLL = 'MATIC'
 QUOTE = 'USD'
 
-FILENAME = 'results/res135-20-AVAXUSDMATIC_2022919-7453644673771615700.csv'
+FILENAME = 'results/res275-20-MATICUSDMATIC_20221211-350098549448382302.csv'
 
 perpsymbol = re.search("-[A-Z]+_", FILENAME).group(0)[1:-1]
 INDEX = perpsymbol[:(len(perpsymbol) - len(QUOTE + COLL))]
@@ -21,24 +38,11 @@ def main():
     file = FILENAME if FILENAME[-3:] == 'csv' else FILENAME + '.csv'
     df = pd.read_csv(file)
     
-    df = df.iloc[int(df.shape[0] * 2/3):]
+    # df = df.iloc[int(df.shape[0] * 2/3):]
 
     df['mid_price_rel'] = (df['mid_price'] - df['idx_px']) / df['idx_px']
     df['mark_price_rel'] = (df['mark_price'] - df['idx_px']) / df['idx_px']
     df['cex_price_rel'] = df['cex_px'] / df['idx_px'] - 1
-    # df['max_long_slip'] = (df['max_long_price'] - df['mid_price']) / df['mid_price']
-    # df['avg_long_slip'] = (df['avg_long_price'] - df['mid_price']) / df['mid_price']
-    # df['min_long_slip'] = (df['min_long_price'] - df['mid_price']) / df['mid_price']
-    # df['max_short_slip'] = (df['max_short_price'] - df['mid_price']) / df['mid_price']
-    # df['avg_short_slip'] = (df['avg_short_price'] - df['mid_price']) / df['mid_price']
-    # df['min_short_slip'] = (df['min_short_price'] - df['mid_price']) / df['mid_price']
-    # some sims already have this info
-    # if not '100klots_long_slip' in df.columns:
-    #     df['100klots_long_slip'] = (df['100klots_long_price'] - df['mid_price']) / df['mid_price']
-    #     df['100klots_short_slip'] = (df['100klots_short_price'] - df['mid_price']) / df['mid_price']
-    #     df['10k_long_slip'] = (df['10k_long_price'] - df['mid_price']) / df['mid_price']
-    #     df['10k_short_slip'] = (df['10k_short_price'] - df['mid_price']) / df['mid_price']
-
 
     price_columns = [x for x in df.columns if re.search('^perp_pi', x)]
     if len(price_columns) > 0:
@@ -86,12 +90,11 @@ def main():
                 "variance": np.abs(np.nanvar(x)),
                 "nobs": x.shape[0],
             }
-        # dg["exchange"] = "D8X"
-        # dg["daterange"] = str([datetime.date.fromtimestamp(from_date), datetime.date.fromtimestamp(to_date)])
         print(dg.head())
         print(dg.tail())
-        slip_file = re.sub(".csv", "-slippage_stats.csv", file)
-        dg.to_csv(slip_file, index=False)
+        # slip_file = re.sub(".csv", "-slippage_stats.csv", file)
+        # dg.to_csv(slip_file, index=False)
+    
     # x = (df['100klots_long_slip'].abs() + df['100klots_short_slip'].abs()).values
     # q = [0.01, 0.05, 0.25, 0.5, 0.6, 0.7, 0.8, 0.9, 0.95]
     # v = np.quantile(x, q)
@@ -178,12 +181,12 @@ def plot_perp_funds(ax, df):
     ax.grid(linestyle='--', linewidth=1)
 
 def plot_price_premia(ax, df):
-    # if df['cex_price_rel'].abs().max() > 0:
-    #     ax.plot(df['datetime'], df['cex_price_rel']*1e4,  'k-', label='CEX mark-premium')
-    # ax.plot(df['datetime'], df['mid_price_rel']*1e4, 'r:', alpha=0.5,  label='DEX mid-premium')
-    # ax.plot(df['datetime'], df['mark_price_rel']*1e4,  'r-', label='DEX mark-premim')
-    ax.plot(df['datetime'], df['funding_rate']*1e4 * 8 * 60, 'g-', label='DEX funding rate') # * 8 * 60 so it's an 8h rate
-    ax.plot(df['datetime'], df['funding_rate'].rolling(8 * 60).sum()*1e4, 'g:', alpha=0.5)
+    if df['cex_price_rel'].abs().max() > 0:
+        ax.plot(df['datetime'], df['cex_price_rel']*1e4,  'k-', label='CEX mark-premium')
+    ax.plot(df['datetime'], df['mid_price_rel']*1e4, 'r:', alpha=0.5,  label='DEX mid-premium')
+    ax.plot(df['datetime'], df['mark_price_rel']*1e4,  'r-', label='DEX mark-premim')
+    # ax.plot(df['datetime'], df['funding_rate']*1e4 * 8 * 60, 'g-', label='DEX funding rate') # * 8 * 60 so it's an 8h rate
+    ax.plot(df['datetime'], df['funding_rate'].rolling(8 * 60).sum()*1e4, 'g-', alpha=0.7, label="Funding rate (8h accrued)")
 
     ax.set(xlabel="Time", ylabel="Basis Points")
     ax.grid(linestyle='--', linewidth=1)
@@ -224,7 +227,7 @@ def plot_perp_slippage(ax, df):
     slippage = [x for x in df.columns if re.search('^perp_price', x)]
     slippage = [slippage[0], slippage[5], slippage[10], slippage[-11], slippage[-6], slippage[-1]]
     # print(perp_pnls)
-    color = iter(cm.rainbow(np.linspace(0, 1, len(slippage))))
+    color = iter(cm.cool(np.linspace(0, 1, len(slippage))))
     for i, p in enumerate(slippage):
         if i % 4 != 0:
             next
@@ -287,7 +290,7 @@ def plot_pnl(ax, df):
     # ax.plot(df['datetime'], df['trader_pnl_cc'], 'k-', label="")
     perp_pnls = [x for x in df.columns if re.search('_pnl_cc', x) and not re.search('^perp', x)]
     # print(perp_pnls)
-    color = iter(cm.rainbow(np.linspace(0, 1, len(perp_pnls))))
+    color = iter(cm.cool(np.linspace(0, 1, len(perp_pnls))))
     for p in perp_pnls:
         c = next(color)
         # print(p)

@@ -355,11 +355,8 @@ class Perpetual:
         self.my_amm.increment_pricing_staker_cash()
         amt_df = 0
 
-        if rebalance_amnt_cc > 0: # and self.amm_trader.cash_cc > 0:
+        if rebalance_amnt_cc > 0:
             # transfer From AMM Margin To Pool
-            # if rebalance_amnt_cc > self.amm_trader.cash_cc:
-            #     # can't transfer more than what's available
-            #     rebalance_amnt_cc = self.amm_trader.cash_cc
             (amount_staker, amount_amm) = self.__split_amount(rebalance_amnt_cc, False)
             self.amm_trader.cash_cc = self.amm_trader.cash_cc - rebalance_amnt_cc
             assert(amount_staker == 0 or self.my_amm.staker_cash_cc > 0)

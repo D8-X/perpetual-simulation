@@ -45,9 +45,9 @@ NUM_TRADERS = {
     'GBPUSD': 0,
     'SPYUSD': 0,
     'TSLAUSD': 0,
-    'MATICUSD': 0,
+    'MATICUSD': 10,
     'LINKUSD': 0,
-    'AVAXUSD': 10,
+    'AVAXUSD': 0,
 }
 
 # new traders join randomly - up to how many each time? 
@@ -55,16 +55,16 @@ NUM_TRADERS = {
 # to keep same growth rate but reduced target (e.g. to go from 4 to 2 months and keep all other params the same, use divider = 2)
 GROWTH_DIVIDER = 2
 GROWTH_MULTIPLIER = {
-    'BTCUSD': 20 // GROWTH_DIVIDER, 
-    'XAUUSD': 20 // GROWTH_DIVIDER, 
-    'BNBUSD': 20 // GROWTH_DIVIDER,  
-    'ETHUSD': 20 // GROWTH_DIVIDER, 
-    'CHFUSD': 20 // GROWTH_DIVIDER, 
-    'GBPUSD': 20 // GROWTH_DIVIDER, 
-    'SPYUSD': 20 // GROWTH_DIVIDER,
-    'MATICUSD': 20 // GROWTH_DIVIDER,
-    'LINKUSD': 20 // GROWTH_DIVIDER,
-    'AVAXUSD': 20 // GROWTH_DIVIDER,
+    'BTCUSD': 50 // GROWTH_DIVIDER, 
+    'XAUUSD': 50 // GROWTH_DIVIDER, 
+    'BNBUSD': 50 // GROWTH_DIVIDER,  
+    'ETHUSD': 50 // GROWTH_DIVIDER, 
+    'CHFUSD': 50 // GROWTH_DIVIDER, 
+    'GBPUSD': 50 // GROWTH_DIVIDER, 
+    'SPYUSD': 50 // GROWTH_DIVIDER,
+    'MATICUSD': 50 // GROWTH_DIVIDER,
+    'LINKUSD': 50 // GROWTH_DIVIDER,
+    'AVAXUSD': 50 // GROWTH_DIVIDER,
 }
 
 # how many arb bots we run for each perp - zero is conservative
@@ -76,9 +76,9 @@ BOTS_PER_PERP = {
     'CHFUSD': 0,
     'GBPUSD': 0,
     'SPYUSD': 0,
-    'MATICUSD': 0,
+    'MATICUSD': 20,
     'LINKUSD': 0,
-    'AVAXUSD': 20,
+    'AVAXUSD': 0,
 }
 
 # Chainlink provides data from multiple networks
@@ -108,11 +108,11 @@ SIM_PARAMS = dict()
 SIM_PARAMS['usd_per_bot'] = 2_000 
 
 # withdrawing funds automatically - just for educational purposes, we set rate to 0 for now
-SIM_PARAMS['protocol_profit_withdrawal_frequency'] = 60 * 24 * 10 # we try to withdraw every n days (seconds)
-SIM_PARAMS['protocol_profit_withdrawal_rate'] = 0.0 # % of the excess (if any) we withdraw ([0,1])
+SIM_PARAMS['protocol_profit_withdrawal_frequency'] = (60 * 24) * 10 # we try to withdraw every n days (in seconds)
+SIM_PARAMS['protocol_profit_withdrawal_rate'] = 0.25 # % of the excess (if any) we withdraw ([0,1])
 SIM_PARAMS['protocol_profit_withdrawal_floor'] = 1_000 # the least amount worth withdrawing in one go (QC)
 SIM_PARAMS['protocol_profit_withdrawal_cap'] = 100_000 # the max amount we would withdraw in one go (QC)
-SIM_PARAMS['protocol_profit_withdrawal_freeze_period'] = 60 * 24 * 30 # no withdrawals for the first n days (seconds)
+SIM_PARAMS['protocol_profit_withdrawal_freeze_period'] = (60 * 24) * 90 # no withdrawals for the first n days (in seconds)
 SIM_PARAMS['animate_premia'] = False # just for testing, do not use
 
 # probability that an inactive trader opens a position within 24 hours = 1 / num_trades_per_day
@@ -122,16 +122,16 @@ SIM_PARAMS['animate_premia'] = False # just for testing, do not use
 SIM_PARAMS['prob_best_tier'] = 0 # not used when simulating zero fees
 
 # number of liquidity providers
-SIM_PARAMS['num_stakers'] = 25
-# total cash brought in by each LP (randomized)
-SIM_PARAMS['cash_per_staker'] = 4_000 # if num=25, then use 20k for 500k, 8k for 200k, 6k for 150k, 4k for 100k, 2k for 50k
+SIM_PARAMS['num_stakers'] = 10
+# # total cash brought in by each LP (randomized)
+# SIM_PARAMS['cash_per_staker'] = 100_000 # if num=25, then use 20k for 500k, 8k for 200k, 6k for 150k, 4k for 100k, 2k for 50k
 # how often do they deposit per month, in average (randomized)
 SIM_PARAMS['monthly_stakes'] = 1.5
 # they withdraw after this number of months (randomized)
 SIM_PARAMS['holding_period_months'] = 1
 
 # this is just for logging on screen
-SIM_PARAMS['log_every'] =20_000
+SIM_PARAMS['log_every'] = 20_000
 
 POSITIONS_WATCH = dict()
 
@@ -139,13 +139,13 @@ POSITIONS_WATCH = dict()
 RUN_PARALLEL = True
 
 def main():
-    all_runs_t0 = datetime.now()
+    all_runs_t0 = datetime.now()    
 
     # seed for cash samples, random agent trading order, random agent preferences
     seeds = [
         # 123,
         # 345,
-        567,
+        # 567,
         42, 
         31415,
         66260,
@@ -153,18 +153,19 @@ def main():
 
     # simulation period
     simulation_horizons = [
-        (datetime(2022, 7, 20, 0, 0, tzinfo=timezone.utc), datetime(2022, 9, 20, 0, 0, tzinfo=timezone.utc)),
+        # (datetime(2022, 7, 20, 0, 0, tzinfo=timezone.utc), datetime(2022, 10, 21, 0, 0, tzinfo=timezone.utc)),
         # (datetime(2022, 5, 15, 0, 0, tzinfo=timezone.utc), datetime(2022, 8, 16, 0, 0, tzinfo=timezone.utc)),
         # (datetime(2022, 6, 17, 0, 0, tzinfo=timezone.utc), datetime(2022, 9, 18, 0, 0, tzinfo=timezone.utc)),
-        # (datetime(2022, 6, 20, 0, 0, tzinfo=timezone.utc), datetime(2022, 9, 20, 0, 0, tzinfo=timezone.utc)), 
+        (datetime(2022, 6, 12, 0, 0, tzinfo=timezone.utc), datetime(2022, 12, 12, 0, 0, tzinfo=timezone.utc)), 
         # (datetime(2022, 7, 12, 0, 0, tzinfo=timezone.utc), datetime(2022, 9, 20, 0, 0, tzinfo=timezone.utc)), 
     ]
 
     # given that a trader is about to open a position, with what probability will it be a long one?
     long_probs = [
-        # 0.38,
-        0.5,
-        # 0.64,
+        # 0.35,
+        0.50,
+        # 0.65,
+        # 0.30,
         # 0.95,
     ]
 
@@ -174,19 +175,20 @@ def main():
         # 50_000_000,
         # 3_000_000,
         # 3 * 250_000,
-        len(SYMBOLS) * 350_000,
-        len(SYMBOLS) * 1_000_000,
-        # len(SYMBOLS) * 10_000_000,
+        len(SYMBOLS) * 150_000,
+        # len(SYMBOLS) * 1_000_000,
+        # len(SYMBOLS) * 12_500_000,
     ]
 
     # exact cash amounts for each trader are randomized, this is an average
     # distribution is fat tailed
     usds_per_trader = [
-        2_000,
-        # 1_200,
-        # 1_600,
-        
+        1_000,
         # 1_500,
+        # 1_200,
+        # 2_000,
+        
+        # 2_500,
         # 2_000,
         # 3_000,
         # 3_500,
@@ -195,11 +197,19 @@ def main():
     num_trades_per_day = [
         # 0.25,
         # 0.5,
+        # 0.75,
         1,
+        # 1.25,
+        # 1.5,
         # 2,
     ]
+    
+    # total cash brought in by each LP (randomized)
+    cash_per_lp = [
+        100_000,
+    ]
 
-    run_configs = itertools.product(seeds, simulation_horizons, long_probs, initial_investments, usds_per_trader, num_trades_per_day)
+    run_configs = itertools.product(seeds, simulation_horizons, long_probs, initial_investments, usds_per_trader, num_trades_per_day, cash_per_lp)
     total_hash = hash(run_configs)
 
     filename = f"./results/sim_run_id_{total_hash}.csv"
@@ -216,7 +226,8 @@ def main():
         sim_params['initial_protocol_investment'] = run_config[3]
         sim_params['usd_per_trader'] = run_config[4] 
         sim_params['num_trades_per_day'] = run_config[5]
-
+        sim_params['cash_per_staker'] = run_config[6]
+        
         # print("\n" + "".join(("-" for _ in range(100))) + "\n")
         # print(f"Run details:")
         # print(f"From {sim_params['from_date']} to {sim_params['to_date']}")
@@ -283,6 +294,12 @@ def report_stats(amm_state, sim):
     res["LP_CC_APY"] = amm_state.at[n-1, "lp_apy"] #(res["LP_Final_CC"] / res["LP_Init_CC"] - 1) * 365 / res["Days"]
     res["ProfitQC_per_VolumeQC"] = res["Profit_QC"] / res["Volume_QC"]
     res["ProfitCC_per_VolumeCC"] = res["Profit_CC"] / res["Volume_CC"]
+    res["ProtocolEarningsVaultCC"] = amm_state.at[n-1,"protocol_earnings_vault"]
+    res["ProtocolEarningsVaultQC"] = amm_state.at[n-1,"protocol_earnings_vault"] * amm_state.at[0, "idx_s3"]
+    res["ProtocolEarningsVaultQC_per_VolumeCC"] = amm_state.at[n-1,"protocol_earnings_vault"] / res["Volume_CC"]
+    res["ProtocolEarningsVaultQC_per_VolumeQC"] = amm_state.at[n-1,"protocol_earnings_vault"] * amm_state.at[0, "idx_s3"] / res["Volume_QC"]
+    
+    
     
     pi_columns = [x for x in amm_state.columns if re.search('price_impact', x)]
     for col in pi_columns:
@@ -294,7 +311,9 @@ def report_stats(amm_state, sim):
         res[f"{col}_75pct"] = v[2]
         res[f"{col}_mean"] = np.nanmean(x)
         res[f"{col}_stdev"] = np.nanstd(x)
-
+    
+    # res["Attacker_Total_PnL_CC"] = amm_state.at[n-1, "attacker_total_pnl_cc"]
+    # res["Attacker_Best_PnL_CC"] = np.max(np.diff(amm_state[:n-1]["attacker_total_pnl_cc"]))
     return res
 
 
@@ -596,7 +615,8 @@ def simulate(sim_input):
                 + f"DF = {amm.default_fund_cash_cc:.3f} ({100*amm.get_default_fund_gap_to_target_ratio():.1f}%), "\
                 + f"Liquidations = {amm.liquidator_earnings_vault:.3f} ({liquidation_count}) "\
                 + f"Bankrupcies = {sum([sim_state[symbol]['num_replaced_traders'] for symbol in SYMBOLS])}, "\
-                + f"fees = {amm.fees_earned:.3f} "\
+                + f"Fees = {amm.fees_earned:.3f} "\
+                + f"Wtihdrawn earnings = {amm.protocol_earnings_vault:.1f} "\
                 + f"Num traders = {traders_active}/{total_traders} "\
                 + f"Arb pnl = {arb_pnl_cc:.3f} "\
                 + f"(${arb_locked_usd / np.max((arb_active, 1)):.0f} locked per bot, ${arb_locked_usd:.0f} total)"
@@ -1110,6 +1130,7 @@ def get_amm_state_keys():
     ]
     for i, name in enumerate(SYMBOLS):
         keys.append(f"{name}_pnl_cc")
+    keys.append("attacker_total_pnl_cc")
     return keys
 
 def record_amm_state(t, state, amm, stakers, traders):
@@ -1133,6 +1154,8 @@ def record_amm_state(t, state, amm, stakers, traders):
         np.nanmean(amm.lp_cc_apy)
     ]
     new_state.extend([amm.earnings[i] for i, name in enumerate(SYMBOLS)])
+    new_state.append(amm.attacker_pnl)
+    
     state[t,:] = new_state
 
 

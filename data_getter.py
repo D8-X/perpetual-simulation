@@ -342,6 +342,13 @@ if __name__ == "__main__":
     #     '0xc907E116054Ad103354f2D350FD2514433D57F6f',
     #     fromdate=datetime.datetime(2022, 9, 15)
     # )
+    # ETH on Polygon
+    df = maybe_fetch_chainlink_data(
+        'ETHUSD_Polygon_Mainnet', 
+        'https://polygon-rpc.com/', 
+        '0xF9680D99D6C9589e2a93a78A04A279e509205945',
+        fromdate=datetime.datetime(2022, 12, 1)
+    )
     # # CHF on Polygon # not slow
     # df = maybe_fetch_chainlink_data(
     #     'CHFUSD_Polygon_Mainnet', 
@@ -359,12 +366,12 @@ if __name__ == "__main__":
     # )
     
     # AVAX on Avalanche: 0x0A77230d17318075983913bC2145DB16C7366156
-    df = maybe_fetch_chainlink_data(
-        'AVAXUSD_Avalanche_Mainnet', 
-        'https://rpc.ankr.com/avalanche', 
-        '0x0A77230d17318075983913bC2145DB16C7366156',
-        fromdate=datetime.datetime(2022, 9, 1)
-    )
+    # df = maybe_fetch_chainlink_data(
+    #     'AVAXUSD_Avalanche_Mainnet', 
+    #     'https://rpc.ankr.com/avalanche', 
+    #     '0x0A77230d17318075983913bC2145DB16C7366156',
+    #     fromdate=datetime.datetime(2022, 7, 1)
+    # )
     
     # GBP on Polygon # slow
     # df = maybe_fetch_chainlink_data(

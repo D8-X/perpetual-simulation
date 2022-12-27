@@ -8,3 +8,4 @@ results/sim_*.csv
 *.log
 *.out
 *.gz
+inter/*
