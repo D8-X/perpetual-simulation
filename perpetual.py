@@ -107,6 +107,7 @@ class Perpetual:
         self.max_position = max_position
         self.min_num_lots_per_pos = 10
         self.last_df_transfer = amm.get_timestamp()
+        self.is_emergency = False
 
     def inc_time(self):
         # move the EMA of the premium forward
@@ -142,12 +143,16 @@ class Perpetual:
         M1, M2, M3 = self.get_amm_pools()
         K2 = -self.amm_trader.position_bc
         L1 = -self.amm_trader.locked_in_qc
-        px = pricing_benchmark.calculate_perp_priceV4(K2, pos, L1, s2, s3,
-                                                      self.params['fSigma2'],
-                                                      self.params['fSigma3'],
-                                                      self.params['fRho23'],
-                                                      self.params['r'],
-                                                      M1, M2, M3, minSpread, incentiveSpread, self.current_trader_exposure_EMA)
+        if self.collateral_currency is CollateralCurrency.QUANTO and M3 <= 0:
+            self.is_emergency = True
+            px = None
+        else:                
+            px = pricing_benchmark.calculate_perp_priceV4(K2, pos, L1, s2, s3,
+                                                        self.params['fSigma2'],
+                                                        self.params['fSigma3'],
+                                                        self.params['fRho23'],
+                                                        self.params['r'],
+                                                        M1, M2, M3, minSpread, incentiveSpread, self.current_trader_exposure_EMA)
 
         return px
 
@@ -349,6 +354,8 @@ class Perpetual:
     def rebalance_perpetual(self, rebalance_another=True):
         """Rebalance margin of the perpetual to initial margin
         """
+        if self.is_emergency:
+            return
         # excess/defect in the amm's margin account
         rebalance_amnt_cc = self.get_rebalance_margin()
         # account for withdrawals/deposits from LP before distribution
@@ -368,12 +375,20 @@ class Perpetual:
             # withdraw (switch sign for convenience)
             amt = -rebalance_amnt_cc
             # need to get funds from pools
-            max_amount = 0.95 * \
-                (self.my_amm.staker_cash_cc + self.amm_pool_cash_cc)
-            if(amt > max_amount):
-                print(
-                    f"WARNING: {self.symbol} Borrowing {amt-max_amount:.4f} from default fund to cover AMM trader margin. AMM min size too low?")
-                # not enough funds, draw from default fund:
+            max_amount = self.my_amm.staker_cash_cc / len([p for p in self.my_amm.perpetual_list if not p.is_emergency]) + self.amm_pool_cash_cc
+            if amt >= max_amount:
+                print(f"WARNING: {self.symbol} in emergency!")
+                self.is_emergency = True
+                if len([p for p in self.my_amm.perpetual_list if not p.is_emergency]) < 1:
+                    self.my_amm.is_emergency = True
+            else:
+                max_amount = 0.95 * max_amount
+                # try to leave enough funds in the pool
+                # max_amount = np.min((0.95 * max_amount, np.max((0, max_amount - self.params['fAMMMinSizeCC']))))
+                
+            if amt > max_amount:
+                # print(f"WARNING: {self.symbol} Borrowing {amt-max_amount:.4f} from default fund to cover AMM trader margin")
+                # preemptively cap amount withdrawn from perp funds
                 # amount to withdraw from default fund
                 amt_df = amt - max_amount
                 # amount to withdraw from pools
@@ -382,6 +397,8 @@ class Perpetual:
                     # not enough cash in default fund
                     amt_df = self.my_amm.default_fund_cash_cc
                     self.my_amm.is_emergency = True
+                    for p in self.my_amm.perpetual_list:
+                        p.is_emergency = True
                 self.my_amm.default_fund_cash_cc -= amt_df
             (amount_staker, amount_amm) = self.__split_amount(amt, True)
             # withdraw from AMM fund and staker fund
@@ -693,6 +710,8 @@ class Perpetual:
         return is_safe
         
     def trade(self, trader: 'Trader', amount_bc: float, is_close_only: bool):
+        if self.is_emergency:
+            return None
         if trader.cash_cc <= 0:
             print(f"Trade rejected:  {trader.__class__.__name__} does not have cash left: {trader.cash_cc}")
             # can't trade without cash

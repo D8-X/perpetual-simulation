@@ -41,6 +41,7 @@ class AMM:
         self.trader_dir = []
         self.lp_cc_apy = []
         self.earnings = dict()
+        self.attacker_pnl = 0
 
 
 
@@ -312,11 +313,12 @@ class AMM:
         
     
     def increment_pricing_staker_cash(self):
+        # at most one update per block, and only if there is any LP cash deposited
         ts_now = self.get_timestamp()
         if ts_now <= self.last_pricing_cash_update or self.staker_cash_cc == 0:
             return
-
-        z = (ts_now - self.last_pricing_cash_update) / self.fund_transfer_convergence_time
+        # increase proportionally to time elapsed, but so that in the total convergence time everything is transferred
+        z = np.min((1, (ts_now - self.last_pricing_cash_update) / self.fund_transfer_convergence_time))
         P_max = self.max_PtoDF_ratio * self.default_fund_cash_cc
         staker_pricing_cash_cc = self.staker_pricing_cash_ratio * self.staker_cash_cc
         gap_to_max = P_max - staker_pricing_cash_cc

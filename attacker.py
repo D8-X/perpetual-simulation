@@ -61,7 +61,7 @@ class Attacker(Trader):
         attack_ts = self.get_next_trade_timestamp()
         # print(f"AMM time = {cur_ts}, Attack time = {attack_ts}")
         if cur_ts >= attack_ts:
-            print(f"{datetime.datetime.fromtimestamp(cur_ts)} Attacker wants to trade:")
+            # print(f"{datetime.datetime.fromtimestamp(cur_ts)} Attacker wants to trade:")
             # time to trade:
             trade = self.attack_vector[self.current_cycle-1]["trades"][self.next_trade_idx]
             if self.position_bc == 0:
@@ -82,6 +82,7 @@ class Attacker(Trader):
         mid_price = 0.5*(perp.get_price(0.01) + perp.get_price(-0.01))
         mark_price = perp.get_mark_price()
         idx_price = perp.get_index_price()
+        pnl_before = self.pnl_cc
         px = super().trade(dPos, is_close)
         if px:
             
@@ -90,6 +91,7 @@ class Attacker(Trader):
             print(f"Slippage: from idx = {100*(px/idx_price - 1):.3f}, from mid = {100*(px/mid_price - 1):.3f}")
             if is_close:
                 print(f"Cumulative PnL = {self.pnl_cc}")
+                self.amm.attacker_pnl = self.pnl_cc
             self.next_trade_idx += 1
             if self.next_trade_idx == len(self.attack_vector[self.current_cycle-1]["trades"]):
                 # no more trades in this cycle

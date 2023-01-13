@@ -43,7 +43,17 @@ def maybe_fetch_chainlink_data(
     contract = web3.eth.contract(address=token_address, abi=abi)
 
     if toroundID is not None:
+        print(f"toRoundID target: {toroundID}")
         roundId = toroundID
+        is_good_roundID = False
+        while not is_good_roundID:
+            try:
+                _, price, startedAt, timeStamp, answeredInRound = contract.functions.getRoundData(roundId).call()
+                is_good_roundID = True
+                print(f"round id {roundId}, date = {datetime.datetime.fromtimestamp(timeStamp)}, price = {price}")
+            except:
+                roundId -= 1
+        print(f"toroundID was modified to {roundId}")
     else:
         latestData = contract.functions.latestRoundData().call()
         roundId = latestData[4]
@@ -66,6 +76,8 @@ def maybe_fetch_chainlink_data(
         df.drop_duplicates(subset='roundId', keep='first', inplace=True)
     df.sort_values('roundId', ascending=False, inplace=True)
 
+    seen = set(df['roundId'].values)
+    
     numObs = 0
     numCalls = 0
     numErrors = 0
@@ -74,7 +86,7 @@ def maybe_fetch_chainlink_data(
     dt = todate
     while numObs < MAX_NUM_OBS and numCalls < MAX_NUM_CALLS and numErrors < MAX_NUM_FAILS:
         # if observation already exists, nothing to do, except report once in a while
-        if df['roundId'].eq(str(roundId)).any():
+        if str(roundId) in seen: # df['roundId'].eq(str(roundId)).any():
             if numObs % 4096 == 0:
                 mask = df['roundId'] == str(roundId)
                 print(f"{numObs} {roundId} {df[mask]['datetime'].values} {df[mask]['price'].values}")
@@ -91,7 +103,7 @@ def maybe_fetch_chainlink_data(
             numObs += 1
             dt = datetime.datetime.fromtimestamp(timeStamp)
             
-            if numObs % 32 == 0:
+            if numObs % 32 == 0 or numObs == 0:
                 # report queried observations once in a while
                 print(f"{numObs} {roundId} {dt} {price / 100_000_000}")
 
@@ -275,14 +287,14 @@ if __name__ == "__main__":
     #     'BTCUSD_BSC_Mainnet', 
     #     'https://binance.nodereal.io', 
     #     '0x264990fbd0A4796A3E3d8E37C4d5F87a3aCa5Ebf',
-    #     fromdate=datetime.datetime(2022, 4, 1)
+    #     fromdate=datetime.datetime(2022, 1, 1)
     # )
     # # ETH
     # df = maybe_fetch_chainlink_data(
     #     'ETHUSD_BSC_Mainnet', 
     #     'https://binance.nodereal.io', 
     #     '0x9ef1B8c0E4F7dc8bF5719Ea496883DC6401d5b2e',
-    #     fromdate=datetime.datetime(2022, 4, 1)
+    #     fromdate=datetime.datetime(2022, 1, 1)
     # )
     # TSLA
     # df = maybe_fetch_chainlink_data(
@@ -343,12 +355,13 @@ if __name__ == "__main__":
     #     fromdate=datetime.datetime(2022, 9, 15)
     # )
     # ETH on Polygon
-    df = maybe_fetch_chainlink_data(
-        'ETHUSD_Polygon_Mainnet', 
-        'https://polygon-rpc.com/', 
-        '0xF9680D99D6C9589e2a93a78A04A279e509205945',
-        fromdate=datetime.datetime(2022, 12, 1)
-    )
+    # df = maybe_fetch_chainlink_data(
+    #     'ETHUSD_Polygon_Mainnet', 
+    #     'https://polygon-rpc.com/', 
+    #     '0xF9680D99D6C9589e2a93a78A04A279e509205945',
+    #     toroundID=36893488147422759218,
+    #     fromdate=datetime.datetime(2022, 11, 1)
+    # )
     # # CHF on Polygon # not slow
     # df = maybe_fetch_chainlink_data(
     #     'CHFUSD_Polygon_Mainnet', 
@@ -389,7 +402,7 @@ if __name__ == "__main__":
     #     fromdate=datetime.datetime(2022, 1, 1)
     # )
 
-    # # MATIC on BSC
+    # MATIC on BSC
     # df = maybe_fetch_chainlink_data(
     #     'MATICUSD_BSC_Mainnet', 
     #     'https://binance.nodereal.io', 
@@ -404,9 +417,9 @@ if __name__ == "__main__":
     #     '0xca236E327F629f9Fc2c30A4E95775EbF0B89fac8',
     #     fromdate=datetime.datetime(2022, 6, 1)
     # )
-    # df = pd.read_csv("./data/index/chainlink/AVAXUSD_Polygon_Mainnet_1969-12-31_2022-12-07.csv")[['roundId', 'timestamp', 'datetime', 'price']]
-    # df['datetime'] = pd.to_datetime(df['datetime'])
-    # df['datetime'] = df['datetime'].apply(lambda x: x.replace(tzinfo=pytz.utc))
+    df = pd.read_csv("./data/index/chainlink/MATICUSD_BSC_Mainnet_2021-12-31_2023-01-11.csv")[['roundId', 'timestamp', 'datetime', 'price']]
+    df['datetime'] = pd.to_datetime(df['datetime'])
+    df['datetime'] = df['datetime'].apply(lambda x: x.replace(tzinfo=pytz.utc))
     summarize_data(df, n_points=50_000)
     
     #  maybe_fetch_chainlink_data(4, fromdate=datetime.date(2021, 11, 1), toroundID=36893488147419285875) #, todate=datetime.date(2022, 3, 17))
