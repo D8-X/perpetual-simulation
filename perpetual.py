@@ -109,6 +109,11 @@ class Perpetual:
         self.last_df_transfer = amm.get_timestamp()
         self.is_emergency = False
 
+    def set_emergency_status(self):
+        self.is_emergency = True
+        if all([p.is_emergency for p in self.my_amm.perpetual_list]):
+            self.my_amm.is_emergency = True
+            
     def inc_time(self):
         # move the EMA of the premium forward
         self.current_time = self.current_time + 1
@@ -124,6 +129,8 @@ class Perpetual:
 
     def pay_funding(self, trader):
         # self.rebalance_perpetual()
+        if self.is_emergency:
+            return
         rate = self.get_funding_rate()
         coupon_abs = rate * np.abs(trader.position_bc)
         if coupon_abs == 0:
@@ -143,8 +150,8 @@ class Perpetual:
         M1, M2, M3 = self.get_amm_pools()
         K2 = -self.amm_trader.position_bc
         L1 = -self.amm_trader.locked_in_qc
-        if self.collateral_currency is CollateralCurrency.QUANTO and M3 <= 0:
-            self.is_emergency = True
+        if M1 + M2 + M3 <= 0:
+            self.set_emergency_status()
             px = None
         else:                
             px = pricing_benchmark.calculate_perp_priceV4(K2, pos, L1, s2, s3,
@@ -250,7 +257,7 @@ class Perpetual:
         abs_pos = np.min((np.abs(pos), np.abs(max_signed_size)))
         pos = self.my_amm.shrink_to_lot(abs_pos, self.params['fLotSizeBC'])  * (1 if pos > 0 else -1)
         # if below absolute min, then it's just zero
-        if np.abs(pos) < self.min_num_lots_per_pos * self.params['fLotSizeBC']:
+        if np.abs(pos) < self.min_num_lots_per_pos * self.params['fLotSizeBC'] or self.is_emergency:
             pos = 0
         return pos
 
@@ -375,14 +382,16 @@ class Perpetual:
             # withdraw (switch sign for convenience)
             amt = -rebalance_amnt_cc
             # need to get funds from pools
-            max_amount = self.my_amm.staker_cash_cc / len([p for p in self.my_amm.perpetual_list if not p.is_emergency]) + self.amm_pool_cash_cc
-            if amt >= max_amount:
-                print(f"WARNING: {self.symbol} in emergency!")
-                self.is_emergency = True
-                if len([p for p in self.my_amm.perpetual_list if not p.is_emergency]) < 1:
-                    self.my_amm.is_emergency = True
+            avail_funds = self.my_amm.staker_cash_cc / len([p for p in self.my_amm.perpetual_list if not p.is_emergency]) + self.amm_pool_cash_cc
+            # if avail_funds < amt:
+            if avail_funds + self.amm_trader.get_margin_balance_cc(self, False) < 0:
+                # perp has defaulted
+                print(f"\t---- !!! DANGER !!! {self.symbol} in emergency ----")
+                self.set_emergency_status()
+                max_amount = avail_funds
             else:
-                max_amount = 0.95 * max_amount
+                # perp funds can cover most of the margin -> use up to 75% of them, the df will cover the rest
+                max_amount = 0.75 * avail_funds
                 # try to leave enough funds in the pool
                 # max_amount = np.min((0.95 * max_amount, np.max((0, max_amount - self.params['fAMMMinSizeCC']))))
                 
@@ -402,7 +411,6 @@ class Perpetual:
                 self.my_amm.default_fund_cash_cc -= amt_df
             (amount_staker, amount_amm) = self.__split_amount(amt, True)
             # withdraw from AMM fund and staker fund
-            assert(amount_staker == 0 or self.my_amm.staker_cash_cc > amount_staker) # strict because of 95% cap
             self.my_amm.staker_cash_cc -= amount_staker
             self.amm_pool_cash_cc -= amount_amm
             # self.my_amm.protocol_balance_cc -= (amount_amm + amt_df)
