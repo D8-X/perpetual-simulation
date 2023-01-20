@@ -212,15 +212,15 @@ class AMM:
                 self.default_fund_cash_cc -= withdrawal
 
     def add_liquidity(self, staker, cash_cc):
-        if cash_cc == 0:
+        if cash_cc <= 0:
             return
-        
-        assert(cash_cc > 0 and cash_cc <= staker.cash_cc)
+        if cash_cc > staker.cash_cc:
+            cash_cc = staker.cash_cc
         
         # mint tokens
         if self.share_token_supply == 0:
-            # first staker gets the first minted token
-            tokens = 1.0
+            # first staker gets share tokens 1:1 with collateral token
+            tokens = cash_cc
         else:
             # new stakers get tokens so that their share of the resulting total supply equals
             # their share of cash in the resulting total staker cash at the time of deposit
