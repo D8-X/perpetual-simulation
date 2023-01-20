@@ -11,6 +11,7 @@ import time
 from scipy import stats
 from arb_trader import ArbTrader
 from attacker import Attacker
+from committed_staker import CommittedStaker
 from noise_staker import NoiseStaker
 from perpetual import Perpetual
 from trader import CollateralCurrency
@@ -53,7 +54,7 @@ NUM_TRADERS = {
 # new traders join randomly - up to how many each time? 
 # e.g. if we start with N traders and multiplier is M, then there will be in average (M+1) * N traders by the end of the simulation
 # to keep same growth rate but reduced target (e.g. to go from 4 to 2 months and keep all other params the same, use divider = 2)
-GROWTH_DIVIDER = 2
+GROWTH_DIVIDER = 1
 GROWTH_MULTIPLIER = {
     'BTCUSD': 50 // GROWTH_DIVIDER, 
     'XAUUSD': 50 // GROWTH_DIVIDER, 
@@ -107,6 +108,8 @@ SIM_PARAMS = dict()
 # how much cash do we give each arbitrage bot?
 SIM_PARAMS['usd_per_bot'] = 2_000 
 
+SIM_PARAMS['df_init_ratio'] = 0.90 # how much of the initial investment is insurance, %
+
 # withdrawing funds automatically - just for educational purposes, we set rate to 0 for now
 SIM_PARAMS['protocol_profit_withdrawal_frequency'] = (60 * 24) * 10 # we try to withdraw every n days (in seconds)
 SIM_PARAMS['protocol_profit_withdrawal_rate'] = 0.25 # % of the excess (if any) we withdraw ([0,1])
@@ -122,7 +125,8 @@ SIM_PARAMS['animate_premia'] = False # just for testing, do not use
 SIM_PARAMS['prob_best_tier'] = 0 # not used when simulating zero fees
 
 # number of liquidity providers
-SIM_PARAMS['num_stakers'] = 10
+SIM_PARAMS['num_noise_stakers'] = 0
+SIM_PARAMS['num_committed_stakers'] = 1
 # # total cash brought in by each LP (randomized)
 # SIM_PARAMS['cash_per_staker'] = 100_000 # if num=25, then use 20k for 500k, 8k for 200k, 6k for 150k, 4k for 100k, 2k for 50k
 # how often do they deposit per month, in average (randomized)
@@ -131,12 +135,12 @@ SIM_PARAMS['monthly_stakes'] = 1.5
 SIM_PARAMS['holding_period_months'] = 1
 
 # this is just for logging on screen
-SIM_PARAMS['log_every'] = 20_000
+SIM_PARAMS['log_every'] = 1_000
 
 POSITIONS_WATCH = dict()
 
 # Parallelize run?
-RUN_PARALLEL = True
+RUN_PARALLEL = False
 
 def main():
     all_runs_t0 = datetime.now()    
@@ -147,16 +151,16 @@ def main():
         # 345,
         # 567,
         42, 
-        31415,
-        66260,
+        # 31415,
+        # 66260,
     ]
 
     # simulation period
     simulation_horizons = [
         # (datetime(2022, 7, 20, 0, 0, tzinfo=timezone.utc), datetime(2022, 10, 21, 0, 0, tzinfo=timezone.utc)),
         # (datetime(2022, 5, 15, 0, 0, tzinfo=timezone.utc), datetime(2022, 8, 16, 0, 0, tzinfo=timezone.utc)),
-        # (datetime(2022, 6, 17, 0, 0, tzinfo=timezone.utc), datetime(2022, 9, 18, 0, 0, tzinfo=timezone.utc)),
-        (datetime(2022, 6, 12, 0, 0, tzinfo=timezone.utc), datetime(2022, 12, 12, 0, 0, tzinfo=timezone.utc)), 
+        (datetime(2022, 6, 12, 0, 0, tzinfo=timezone.utc), datetime(2022, 12, 12, 0, 0, tzinfo=timezone.utc)),
+        # (datetime(2022, 5, 12, 0, 0, tzinfo=timezone.utc), datetime(2022, 8, 12, 0, 0, tzinfo=timezone.utc)), 
         # (datetime(2022, 7, 12, 0, 0, tzinfo=timezone.utc), datetime(2022, 9, 20, 0, 0, tzinfo=timezone.utc)), 
     ]
 
@@ -175,7 +179,8 @@ def main():
         # 50_000_000,
         # 3_000_000,
         # 3 * 250_000,
-        len(SYMBOLS) * 150_000,
+        100_000,
+        # len(SYMBOLS) * 50_000,
         # len(SYMBOLS) * 1_000_000,
         # len(SYMBOLS) * 12_500_000,
     ]
@@ -192,6 +197,7 @@ def main():
         # 2_000,
         # 3_000,
         # 3_500,
+        # 5_000,
     ]
     
     num_trades_per_day = [
@@ -202,11 +208,12 @@ def main():
         # 1.25,
         # 1.5,
         # 2,
+        # 5,
     ]
     
     # total cash brought in by each LP (randomized)
     cash_per_lp = [
-        100_000,
+        1_000_000,
     ]
 
     run_configs = itertools.product(seeds, simulation_horizons, long_probs, initial_investments, usds_per_trader, num_trades_per_day, cash_per_lp)
@@ -362,8 +369,10 @@ def simulate(sim_input):
         sim_state[symbol]['cash_per_trader_qc'] = sim_state['usd_per_trader']
 
         perp_params[symbol] = load_perp_params(symbol, COLL)
-        perp_params[symbol]['perp_amm_cash_cc'] = np.min(
-            (perp_params[symbol]['fAMMMinSizeCC'], protocol_cash_cc / len(SYMBOLS)))
+        # perp_params[symbol]['perp_amm_cash_cc'] = np.min(
+        #     (perp_params[symbol]['fAMMMinSizeCC'], protocol_cash_cc / len(SYMBOLS)))
+        
+        perp_params[symbol]['perp_amm_cash_cc'] = protocol_cash_cc * (1 - sim_state['df_init_ratio']) / len(SYMBOLS)
         protocol_cash_cc -= perp_params[symbol]['perp_amm_cash_cc']
         
         # simulation state
@@ -439,7 +448,8 @@ def simulate(sim_input):
     # initi stakers
     stakers = initialize_stakers(
         amm, 
-        sim_state['num_stakers'], 
+        sim_state['num_noise_stakers'],
+        sim_state['num_committed_stakers'],
         sim_state['cash_per_staker'], 
         sim_state['monthly_stakes'], 
         sim_state['holding_period_months'])
@@ -478,6 +488,9 @@ def simulate(sim_input):
     trader_pnl = 0
     monitoring_period = sim_input['log_every']
     for t in range(time_df.shape[0]):
+        # staking
+        stakers_stake(stakers)
+        
         # trading happens
         trading_starts = time.time()
         traders_pay_funding(traders)
@@ -487,8 +500,7 @@ def simulate(sim_input):
         delta_trades = sim_state[symbol]['num_trades'] - trades_so_far
         trade_count += delta_trades
         trading_ends = time.time()
-        # staking
-        stakers_stake(stakers)
+        
         
         avg_trading_time += (trading_ends - trading_starts)
         num_trading_measurements += 1
@@ -507,10 +519,10 @@ def simulate(sim_input):
             num_logging_perp_measurements += 1
             
             # this perpetual's status
-            do_print = (
-                t % monitoring_period == 0  #or
-                # amm.get_default_fund_gap_to_target_ratio() < 0.02 or
-                # np.abs(perp.get_mark_price() / perp.get_index_price() - 1) > 0.05
+            do_print = not perp.is_emergency and (
+                t % monitoring_period == 0 #or
+                 #amm.get_default_fund_gap_to_target_ratio() < 0.02# or
+                #  np.abs(perp.get_mark_price() / perp.get_index_price() - 1) > 0.05
             )
                 
             if do_print:
@@ -525,12 +537,14 @@ def simulate(sim_input):
                 
                 trade_size_ema = perp.current_trader_exposure_EMA
                 trades_vec = [
-                    -perp.params['fMaximalTradeSizeBumpUp'] * trade_size_ema, # largest short not considering k*
+                    # -perp.params['fMaximalTradeSizeBumpUp'] * trade_size_ema, # largest short not considering k*
+                    perp.get_max_signed_position_size(False), # max short position
                     -trade_size_ema, # a typical short, ema is biased up
                     # -perp.min_num_lots_per_pos * perp.params['fLotSizeBC'], # smallest short
                     # perp.min_num_lots_per_pos * perp.params['fLotSizeBC'], # smallest long
                     trade_size_ema, # a typical long, ema is biased up
-                    perp.params['fMaximalTradeSizeBumpUp']  * trade_size_ema, # largest long not considering k*
+                    perp.get_max_signed_position_size(True), # max long position
+                    # perp.params['fMaximalTradeSizeBumpUp']  * trade_size_ema, # largest long not considering k*
                 ]
                 slippage_summary = " ".join([f"{100 * (perp.get_price(k) - px0)/px0: .3f}({k: .3f})" for k in trades_vec])
                 premium_summary = f"mark={100*(px - S2)/S2: .3f}% slip=[{slippage_summary}](%,amt) "
@@ -610,9 +624,9 @@ def simulate(sim_input):
             msg = (
                 f"{COLL} pool @ {time_df[t]}: "\
                 + f"S3={S3:.1f} "\
-                # + f"stakers = {amm.staker_cash_cc:.3f} " \
-                + f"LP apy = {np.nanmean([100*s.get_apy() for s in stakers if s.has_staked]):.3f}% " \
-                + f"DF = {amm.default_fund_cash_cc:.3f} ({100*amm.get_default_fund_gap_to_target_ratio():.1f}%), "\
+                + f"LP cash = {amm.staker_cash_cc:.3f} " \
+                + f"LP APY = {np.nanmean([100*s.get_apy() for s in stakers if s.has_staked]):.3f}% " \
+                + f"DF = {amm.default_fund_cash_cc:.2f} ({100*amm.get_default_fund_gap_to_target_ratio():.1f}%), "\
                 + f"Liquidations = {amm.liquidator_earnings_vault:.3f} ({liquidation_count}) "\
                 + f"Bankrupcies = {sum([sim_state[symbol]['num_replaced_traders'] for symbol in SYMBOLS])}, "\
                 + f"Fees = {amm.fees_earned:.3f} "\
@@ -934,12 +948,16 @@ def draw_cash_sample(expected_cash_qc, k=10):
     return min_cash + np.random.gamma(mean_over_min, scale)
 
 
-def initialize_stakers(amm, num_stakers, cash_qc, monthly_stakes=-1, holding_period_months=-1):
+def initialize_stakers(amm, num_noise_stakers, num_committed_stakers, cash_qc, monthly_stakes=-1, holding_period_months=-1):
     stakers = []
-    for _ in range(num_stakers):
+    for _ in range(num_noise_stakers):
         fxq2c = 1 / amm.perpetual_list[0].get_collateral_price()
         cash_cc = draw_cash_sample(cash_qc) * fxq2c
         stakers.append(NoiseStaker(amm, cash_cc, monthly_stakes, holding_period_months))
+    for _ in range(num_committed_stakers):
+        fxq2c = 1 / amm.perpetual_list[0].get_collateral_price()
+        cash_cc = cash_qc * fxq2c
+        stakers.append(CommittedStaker(amm, cash_cc))
     return stakers
 
 
