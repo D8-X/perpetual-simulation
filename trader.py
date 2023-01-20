@@ -40,6 +40,9 @@ class Trader(ABC):
             return
         # parent generically checks if trader is bankrupt, actual trade amounts must be determined by derived classes
         perp = self.amm.get_perpetual(self.perp_idx)
+        if perp.is_emergency:
+            self.set_active_status(False)
+            return
         if self.position_bc == 0:
             # no open position: bankrupt == not enough cash to open a position at mark and max leverage
             lev_cash_bc = self.cash_cc / perp.get_base_to_collateral_conversion(is_mark_price=True) / perp.params['fInitialMarginRate']
