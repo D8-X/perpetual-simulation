@@ -12,14 +12,15 @@ from amm import AMM
 import numpy as np
 
 class MomentumTrader(Trader):
-    def __init__(self, amm: 'AMM', perp_idx : int, cc: CollateralCurrency, cash_cc=np.nan, is_best_tier=False) -> None:
+    def __init__(self, amm: 'AMM', perp_idx : int, cc: CollateralCurrency, cash_cc=np.nan, is_best_tier=False, slip_tol=0.0010) -> None:
         super().__init__(amm, perp_idx, cc, cash_cc=cash_cc, is_best_tier=is_best_tier)
         
         self.EMA = amm.get_perpetual(perp_idx).idx_s2[0]
         self.alpha = 0.0001
+        
+        self.slippage_tol  = np.random.uniform(np.max((10 / 10_000, slip_tol - 5 / 10_000)), slip_tol + 10 / 10_000) 
          # higher probability of trading the larger the indicator
-        self.trade_threshold = 0.01+np.abs(np.random.normal(0, 0.015))
-        self.slippage_tol = 0.0050
+        self.trade_threshold = 2* self.slippage_tol + np.abs(np.random.normal(0, 0.015))
         self.deviation_tol = 0.0200
 
     def query_trade_amount(self) -> 'tuple(float, bool)':

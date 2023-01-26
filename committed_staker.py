@@ -12,5 +12,6 @@ class CommittedStaker(Staker):
         if self.share_tokens == 0 and self.cash_cc > 0:
             # always enter if cash is positive
             self.deposit(self.cash_cc)
+        assert(self.cash_cc <= 0 or self.amm.staker_cash_cc > 0)
         
     

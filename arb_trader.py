@@ -32,8 +32,8 @@ class ArbTrader(Trader):
 
     def set_active_status(self, status):
         super().set_active_status(status)
-        if not status:
-            print("arb bankrupt")
+        # if not status:
+        #     print("arb bankrupt")
 
     def pay_liq_fee(self, fee_amount_cc):
         """Override parent method to also calculate PnL
@@ -137,6 +137,7 @@ class ArbTrader(Trader):
         Returns:
             (amount to trade in base currency, close-only flag) 
         """ 
+        super().query_trade_amount()
         if not self.is_active:
             return (0, False)
         
@@ -146,7 +147,12 @@ class ArbTrader(Trader):
         px_perp = self.bitmex_perp_px[current_time]
 
         # open basis trade (only if no open trade)
-        basis = my_perp.get_price(0)/px_perp-1
+        mid_px = my_perp.get_price(0)
+        if mid_px is None:
+            print(f"Mid price is undefined: {my_perp.symbol}")
+            return (0, False)
+        
+        basis = mid_px/px_perp-1
         r = self.amm.get_perpetual(self.perp_idx).get_funding_rate()
         trade_dir = -np.sign(basis)
         is_favorable = np.sign(r) == -trade_dir

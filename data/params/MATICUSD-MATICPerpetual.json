@@ -1,7 +1,7 @@
 {
   "poolName": "MATIC",
-  "fInitialMarginRate": 0.10,
-  "fMaintenanceMarginRate": 0.05,
+  "fInitialMarginRate": 0.05,
+  "fMaintenanceMarginRate": 0.03,
   "fTreasuryFeeRate": 0.000075,
   "fPnLPartRate": 0.000025,
   "fReferralRebateCC": 0.01,

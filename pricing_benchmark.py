@@ -296,7 +296,7 @@ def get_target_collateral_M3_fromPD(q, K2, s2, s3, L1, sig2, sig3, rho, r):
 
 
 def get_DF_target_size(K2pair, k2trader, r2pair, r3pair, n,
-                            s2, s3, currency_idx):
+                            s2, s3, currency_idx, leverage):
     """Calculate the target size for the default fund
 
     Args:
@@ -313,12 +313,10 @@ def get_DF_target_size(K2pair, k2trader, r2pair, r3pair, n,
     Returns:
         [float]: target size
     """
-    K2pair = np.abs(K2pair)
-    k2abs = np.abs(k2trader)
-    loss_down = (K2pair[0] + n * k2abs)*\
-                (1-np.exp(r2pair[0]))
-    loss_up = (K2pair[1] + n * k2abs)*\
-                (np.exp(r2pair[1])-1)
+    K2pair = np.abs(K2pair) #/ leverage
+    k2abs = np.abs(k2trader)  / leverage
+    loss_down = (K2pair[0] + n * k2abs) * (1-np.exp(r2pair[0]))
+    loss_up = (K2pair[1] + n * k2abs) * (np.exp(r2pair[1])-1) 
     if currency_idx==CollateralCurrency.QUOTE:
         return s2*np.max((loss_down, loss_up))
     elif currency_idx==CollateralCurrency.BASE:
@@ -453,9 +451,10 @@ def test_insurance_fund_size():
     r3pair = np.array([-0.32, 0.18])
     s2 = 2000
     s3 = 31000
+    lev = 20
     for currency_idx in range(3):
         i_star = get_DF_target_size(K2pair, k2_trader, r2pair, r3pair, fCoverN,\
-                            s2, s3, currency_idx+1)
+                            s2, s3, currency_idx+1, lev)
         print("istar for M",currency_idx+1,": ", i_star)
         
 def test_pd_monte_carlo():
@@ -568,6 +567,22 @@ def test_case():
     
     plot.show()
 
+def test_DF_target_size():
+    s2 = 18_000
+    s3 = 1
+    
+    K2pair = [-1000*20/s2, 1000*20/s2]
+    k2trader = 1000 * 20 / s2
+    r2pair = [-0.15, 0.1]
+    r3pair = [0, 0]
+    n = 5
+    lev = 20
+    
+    currency_idx = CollateralCurrency.QUOTE
+    size = get_DF_target_size(K2pair, k2trader, r2pair, r3pair, n,
+                            s2, s3, currency_idx, lev)
+    print(f"size = {size}")
+
 if __name__ == "__main__":
     #test_default_probability()
     #test_target_collateral()
@@ -575,4 +590,5 @@ if __name__ == "__main__":
     #test_insurance_fund_size()
     #test_pd_monte_carlo()
     #test_case()
-    test_maxtradesize()
+    # test_maxtradesize()
+    test_DF_target_size()

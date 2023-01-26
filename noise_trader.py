@@ -8,7 +8,7 @@ import numpy as np
 class NoiseTrader(Trader):
     def __init__(
         self, amm: 'AMM', perp_idx : int, cc: CollateralCurrency, 
-        cash_cc=np.nan, daily_trades=None, is_best_tier=False, prob_long=0.5):
+        cash_cc=np.nan, daily_trades=None, is_best_tier=False, prob_long=0.5, slip_tol=0.0010):
         super().__init__(amm, perp_idx, cc, cash_cc=cash_cc, is_best_tier=is_best_tier)
 
         # fix a trade initialization probability randomly
@@ -23,8 +23,9 @@ class NoiseTrader(Trader):
         self.holding_period_blocks = 60*np.random.uniform(1/4, 48)
         self.time_last_trade = -self.holding_period_blocks
         self.time_last_pnl_check = -self.holding_period_blocks
-        # slippage tolerance: 0.5%-2%
-        self.slippage_tol  = np.random.uniform(0.0005, 0.0075)
+        
+        # slippage tolerance:
+        self.slippage_tol  = np.random.uniform(np.max((5 / 10_000, slip_tol - 5 / 10_000)), slip_tol + 5 / 10_000) 
         
         # when to close?
         self.cash_to_open_cc = 0 # to track pnl

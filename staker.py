@@ -12,7 +12,7 @@ class Staker(ABC):
 
     def deposit(self, cash_cc):
         # checks are done by amm
-        self.deposit_cash_cc = self.cash_cc
+        self.deposit_cash_cc = cash_cc
         self.deposit_time = self.amm.get_timestamp()
         self.amm.add_liquidity(self, cash_cc)
         self.has_staked = True

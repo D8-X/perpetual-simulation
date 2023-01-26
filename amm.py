@@ -6,6 +6,7 @@
 
 import numpy as np
 from amm_trader import AMMTrader
+from committed_staker import CommittedStaker
 from perpetual import Perpetual
 from trader import CollateralCurrency, Trader
 
@@ -25,8 +26,8 @@ class AMM:
         self.staker_cash_cc = 0
         self.staker_pricing_cash_ratio = 0 # 'P'
         self.last_pricing_cash_update = 0
-        self.fund_transfer_convergence_time = 60 * 60 * params['iFundTransferConvergenceHours'] # 3 days in seconds
-        self.max_PtoDF_ratio = 0.75 
+        self.fund_transfer_convergence_time = 60 * 60 * params['iFundTransferConvergenceHours'] # in seconds
+        self.max_PtoDF_ratio = np.inf # 0.75 
         # how much in CC ccy can the pot of staker cash used in pricing increase in a given incorporation cycle (one day above)?
         self.max_liquidity_inc_delta = params['fMaxTransferPerConvergencePeriodCC'] 
 
@@ -233,8 +234,18 @@ class AMM:
         # distribute cash
         staker.cash_cc -= cash_cc
         self.staker_cash_cc += cash_cc
-        # update pricing cash ratio: ratio_new = ratio_old * cash_old / (cash_old + delta_cash)
-        self.staker_pricing_cash_ratio *= (self.staker_cash_cc - cash_cc) / self.staker_cash_cc
+        # update pricing cash ratio: 
+        if staker is CommittedStaker:
+            # this cash is used for pricing immediately
+            # pricing_cash_new = pricing_cash_old + delta_cash = ratio_new * cash_new
+            # --> ratio_new = (ratio_old * cash_old + delta_cash) / cash_new
+            self.staker_pricing_cash_ratio = (self.staker_pricing_cash_ratio * (self.staker_cash_cc - cash_cc) + cash_cc) / self.staker_cash_cc
+        else:
+            # the cash is virtual at first, so pricing ratio is adjusted so that
+            # pricing_cash after deposit = pricing cash before deposit
+            # i.e. pricing_cash_new = ratio_new * cash_new = ratio_old * cash_old
+            # --> ratio_new = ratio_old * cash_old / (cash_old + delta_cash)
+            self.staker_pricing_cash_ratio *= (self.staker_cash_cc - cash_cc) / self.staker_cash_cc
         self.last_pricing_cash_update = self.get_timestamp()
 
     def remove_liquidity(self, staker, tokens):
@@ -302,7 +313,8 @@ class AMM:
             return 0
         scale = np.min((1, (ts_now - perp.last_df_transfer) / self.fund_transfer_convergence_time))
         # cap amount to transfer
-        delta_cash_cc = scale * np.min((target, self.max_liquidity_inc_delta))
+        transfer_cap = self.max_liquidity_inc_delta * np.min((1, self.get_default_fund_gap_to_target_ratio()))
+        delta_cash_cc = scale * np.min((target, transfer_cap))
         if delta_cash_cc > amount:
             delta_cash_cc = amount
         self.default_fund_cash_cc -= delta_cash_cc

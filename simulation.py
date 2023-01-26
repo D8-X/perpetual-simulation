@@ -108,7 +108,7 @@ SIM_PARAMS = dict()
 # how much cash do we give each arbitrage bot?
 SIM_PARAMS['usd_per_bot'] = 2_000 
 
-SIM_PARAMS['df_init_ratio'] = 0.90 # how much of the initial investment is insurance, %
+SIM_PARAMS['df_init_ratio'] = 0.01 # how much of the initial investment is insurance, %
 
 # withdrawing funds automatically - just for educational purposes, we set rate to 0 for now
 SIM_PARAMS['protocol_profit_withdrawal_frequency'] = (60 * 24) * 10 # we try to withdraw every n days (in seconds)
@@ -123,6 +123,8 @@ SIM_PARAMS['animate_premia'] = False # just for testing, do not use
 
 # prob that trader is in a tier that pays zero fees. higher is more conservative
 SIM_PARAMS['prob_best_tier'] = 0 # not used when simulating zero fees
+SIM_PARAMS['trader_slippage_tolerance'] = 15 / 10_000 # this is randomized
+
 
 # number of liquidity providers
 SIM_PARAMS['num_noise_stakers'] = 0
@@ -158,10 +160,10 @@ def main():
     # simulation period
     simulation_horizons = [
         # (datetime(2022, 7, 20, 0, 0, tzinfo=timezone.utc), datetime(2022, 10, 21, 0, 0, tzinfo=timezone.utc)),
-        # (datetime(2022, 5, 15, 0, 0, tzinfo=timezone.utc), datetime(2022, 8, 16, 0, 0, tzinfo=timezone.utc)),
-        (datetime(2022, 6, 12, 0, 0, tzinfo=timezone.utc), datetime(2022, 12, 12, 0, 0, tzinfo=timezone.utc)),
-        # (datetime(2022, 5, 12, 0, 0, tzinfo=timezone.utc), datetime(2022, 8, 12, 0, 0, tzinfo=timezone.utc)), 
-        # (datetime(2022, 7, 12, 0, 0, tzinfo=timezone.utc), datetime(2022, 9, 20, 0, 0, tzinfo=timezone.utc)), 
+        # (datetime(2022, 4, 12, 0, 0, tzinfo=timezone.utc), datetime(2022, 6, 16, 0, 0, tzinfo=timezone.utc)),
+        # (datetime(2022, 6, 12, 0, 0, tzinfo=timezone.utc), datetime(2022, 12, 12, 0, 0, tzinfo=timezone.utc)),
+        (datetime(2022, 5, 12, 0, 0, tzinfo=timezone.utc), datetime(2022, 8, 12, 0, 0, tzinfo=timezone.utc)), 
+        # (datetime(2022, 7, 20, 0, 0, tzinfo=timezone.utc), datetime(2022, 10, 20, 0, 0, tzinfo=timezone.utc)), 
     ]
 
     # given that a trader is about to open a position, with what probability will it be a long one?
@@ -179,7 +181,8 @@ def main():
         # 50_000_000,
         # 3_000_000,
         # 3 * 250_000,
-        100_000,
+        len(SYMBOLS) * 12_500,
+        # 50_000,
         # len(SYMBOLS) * 50_000,
         # len(SYMBOLS) * 1_000_000,
         # len(SYMBOLS) * 12_500_000,
@@ -188,10 +191,10 @@ def main():
     # exact cash amounts for each trader are randomized, this is an average
     # distribution is fat tailed
     usds_per_trader = [
-        1_000,
+        # 1_000,
         # 1_500,
         # 1_200,
-        # 2_000,
+        2_000,
         
         # 2_500,
         # 2_000,
@@ -204,10 +207,10 @@ def main():
         # 0.25,
         # 0.5,
         # 0.75,
-        1,
+        # 1,
         # 1.25,
         # 1.5,
-        # 2,
+        2,
         # 5,
     ]
     
@@ -344,7 +347,7 @@ def simulate(sim_input):
     total_arb_traders = dict()
     total_num_traders = dict()
     for symbol in SYMBOLS:
-        total_noise_traders[symbol] = int(np.ceil(NUM_TRADERS[symbol] * 0.90))
+        total_noise_traders[symbol] = int(np.ceil(NUM_TRADERS[symbol] * 0.70))
         total_momentum_traders[symbol] = NUM_TRADERS[symbol] - total_noise_traders[symbol]
         total_arb_traders[symbol] = BOTS_PER_PERP[symbol]
         total_num_traders[symbol] = total_noise_traders[symbol] + total_momentum_traders[symbol] + total_arb_traders[symbol]
@@ -428,7 +431,8 @@ def simulate(sim_input):
                 cash_qc=sim_state[symbol]['cash_per_trader_qc'],
                 arb_cash_qc=sim_state['usd_per_bot'],
                 prob_best_tier=sim_state['prob_best_tier'],
-                prob_long=sim_state['prob_long']
+                prob_long=sim_state['prob_long'],
+                slip_tol=sim_state['trader_slippage_tolerance']
             )
         )
         # ADD ATTACKER:
@@ -571,7 +575,7 @@ def simulate(sim_input):
                 )
                 if traders_joining > 0:
                     for _ in range(traders_joining):
-                        noise_trader = 1 if np.random.uniform() < 0.9 else 0
+                        noise_trader = 1 if np.random.uniform() < 0.7 else 0
                         new_noise_traders += noise_trader
                         new_momentum_traders += 1 - noise_trader
 
@@ -966,7 +970,7 @@ def stakers_stake(stakers):
         staker.stake()
 
 
-def initialize_traders(noise_traders, momentum_traders, arb_traders, perp_idx, cex_perp_px, amm, currency, num_trades_per_day=1, cash_qc=-1, arb_cash_qc=-1, prob_best_tier=0, prob_long=-1):
+def initialize_traders(noise_traders, momentum_traders, arb_traders, perp_idx, cex_perp_px, amm, currency, num_trades_per_day=1, cash_qc=-1, arb_cash_qc=-1, prob_best_tier=0, prob_long=-1, slip_tol=0.0010):
     trader_list=[]
     m = np.max((noise_traders, momentum_traders, arb_traders))
     num = [0,0,0]
@@ -978,12 +982,12 @@ def initialize_traders(noise_traders, momentum_traders, arb_traders, perp_idx, c
         if num[0]<noise_traders:
             cash_samples.append(draw_cash_sample(cash_qc))
             is_best_tier = np.random.uniform() <= prob_best_tier
-            trader_list.append(NoiseTrader(amm, perp_idx, currency, cash_cc=cash_samples[-1] * fx_q2c, daily_trades=num_trades_per_day, is_best_tier=is_best_tier, prob_long=prob_long))
+            trader_list.append(NoiseTrader(amm, perp_idx, currency, cash_cc=cash_samples[-1] * fx_q2c, daily_trades=num_trades_per_day, is_best_tier=is_best_tier, prob_long=prob_long, slip_tol=slip_tol))
             num[0] += 1
         if num[1]<momentum_traders:
             cash_samples.append(draw_cash_sample(cash_qc))
             is_best_tier = np.random.uniform() <= prob_best_tier
-            trader_list.append(MomentumTrader(amm, perp_idx, currency, cash_cc=cash_samples[-1] * fx_q2c, is_best_tier=is_best_tier))
+            trader_list.append(MomentumTrader(amm, perp_idx, currency, cash_cc=cash_samples[-1] * fx_q2c, is_best_tier=is_best_tier, slip_tol=slip_tol))
             num[1] += 1
         if num[2]<arb_traders:
             trader_list.append(ArbTrader(amm, perp_idx, currency, cex_perp_px, cash_cc=arb_cash_qc * fx_q2c))

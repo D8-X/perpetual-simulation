@@ -110,6 +110,7 @@ class Perpetual:
         self.is_emergency = False
 
     def set_emergency_status(self):
+        print(f"--------- {self.symbol} is in emergency ---------")
         self.is_emergency = True
         if all([p.is_emergency for p in self.my_amm.perpetual_list]):
             self.my_amm.is_emergency = True
@@ -150,16 +151,19 @@ class Perpetual:
         M1, M2, M3 = self.get_amm_pools()
         K2 = -self.amm_trader.position_bc
         L1 = -self.amm_trader.locked_in_qc
-        if M1 + M2 + M3 <= 0:
+        if M1 + M2 + M3 < 0:
             self.set_emergency_status()
-            px = None
-        else:                
-            px = pricing_benchmark.calculate_perp_priceV4(K2, pos, L1, s2, s3,
-                                                        self.params['fSigma2'],
-                                                        self.params['fSigma3'],
-                                                        self.params['fRho23'],
-                                                        self.params['r'],
-                                                        M1, M2, M3, minSpread, incentiveSpread, self.current_trader_exposure_EMA)
+            print(f"warning : pricing with negative cash! M1={M1}, M2={M2}, M3={M3}, amm_pool={self.amm_pool_cash_cc}, df={self.my_amm.default_fund_cash_cc}")
+            # return None
+        # else:                
+        px = pricing_benchmark.calculate_perp_priceV4(K2, pos, L1, s2, s3,
+                                                    self.params['fSigma2'],
+                                                    self.params['fSigma3'],
+                                                    self.params['fRho23'],
+                                                    self.params['r'],
+                                                    M1, M2, M3, minSpread, incentiveSpread, self.current_trader_exposure_EMA)
+        if px is None:
+            print(f"Price is undefined! {self.symbol}")
 
         return px
 
@@ -261,10 +265,41 @@ class Perpetual:
             pos = 0
         return pos
 
+    def get_weight_for_LP(self):
+        # K2 = OI_long - OI_short, OI_x >= 0
+        oi_long = self.open_interest
+        oi_short = np.max((self.open_interest + self.amm_trader.position_bc,0)) # floor because of machine eps
+
+        # # geometric mean:
+        # # problem is it's zero if only one side is traded
+        # return np.sqrt(oi_long  * oi_short)
+        
+        # # geometric mean with buffer:
+        return np.sqrt(np.abs(oi_long  * oi_short) + self.params['fReferralRebateCC'])
+
+        # # arithmetic mean:
+        # # problem is it doesn't penalize imbalance
+        # return 0.5*(oi_long + oi_short)
+    
+        # # p-mean:
+        # # p < 1, closer to the geometric mean but not zero when one sided
+        # return (0.5*(np.sqrt(oi_long) + np.sqrt(oi_short))) ** 2 * self.get_base_to_collateral_conversion(False)
+        
+    
     def get_pricing_staked_cash_for_perp(self):
-        ## same for all perps in pool
+        # # same for all perps in pool
+        # if len(self.my_amm.perpetual_list) > 0:
+        #     return (self.my_amm.staker_pricing_cash_ratio * self.my_amm.staker_cash_cc) / len(self.my_amm.perpetual_list)
+        # else:
+        #     return 0
+        
+        # # weighted by open interest
         if len(self.my_amm.perpetual_list) > 0:
-            return (self.my_amm.staker_pricing_cash_ratio * self.my_amm.staker_cash_cc) / len(self.my_amm.perpetual_list)
+            total_weight = np.sum([perp.get_weight_for_LP() for perp in self.my_amm.perpetual_list if perp.open_interest > 0])
+            if total_weight > 0:
+                return self.get_weight_for_LP() / total_weight * self.my_amm.staker_cash_cc
+            else:
+                return self.my_amm.staker_cash_cc / len(self.my_amm.perpetual_list)
         else:
             return 0
 
@@ -273,7 +308,7 @@ class Perpetual:
         
         staker_cash_cc = self.get_pricing_staked_cash_for_perp()
         # combine with protocol owned cash
-        pricing_cash_cc = self.amm_pool_cash_cc + staker_cash_cc + self.amm_trader.cash_cc
+        pricing_cash_cc = staker_cash_cc + np.max((0, self.amm_pool_cash_cc + self.amm_trader.cash_cc))
         # assign according to collateral type
         if self.collateral_currency is CollateralCurrency.BASE:
             M1, M3 = 0, 0
@@ -382,7 +417,10 @@ class Perpetual:
             # withdraw (switch sign for convenience)
             amt = -rebalance_amnt_cc
             # need to get funds from pools
-            avail_funds = self.my_amm.staker_cash_cc / len([p for p in self.my_amm.perpetual_list if not p.is_emergency]) + self.amm_pool_cash_cc
+            # avail_funds = self.my_amm.staker_cash_cc / len([p for p in self.my_amm.perpetual_list if not p.is_emergency]) + self.amm_pool_cash_cc
+            M1, M2, M3 = self.get_amm_pools()
+            # substract amm margin cash because it's already accounted for in the rebalace amount 
+            avail_funds = M1 + M2 + M3 - self.amm_trader.cash_cc
             # if avail_funds < amt:
             if avail_funds + self.amm_trader.get_margin_balance_cc(self, False) < 0:
                 # perp has defaulted
@@ -391,7 +429,7 @@ class Perpetual:
                 max_amount = avail_funds
             else:
                 # perp funds can cover most of the margin -> use up to 75% of them, the df will cover the rest
-                max_amount = 0.75 * avail_funds
+                max_amount = 0.95 * avail_funds
                 # try to leave enough funds in the pool
                 # max_amount = np.min((0.95 * max_amount, np.max((0, max_amount - self.params['fAMMMinSizeCC']))))
                 
@@ -594,9 +632,10 @@ class Perpetual:
         # assert(self.my_amm.staker_cash_cc + self.amm_pool_cash_cc > 0)
         avail_cash_cc = self.my_amm.staker_cash_cc + self.my_amm.get_amm_funds() + self.my_amm.default_fund_cash_cc
         w_staker = self.my_amm.staker_cash_cc / avail_cash_cc
-        if not is_withdraw:
-            w_staker = np.min(
-                (self.glbl_params['ceil_staker_pnl_share'], w_staker))
+        w_staker = np.min((self.glbl_params['ceil_staker_pnl_share'], w_staker))
+        # if not is_withdraw:
+        #     w_staker = np.min(
+        #         (self.glbl_params['ceil_staker_pnl_share'], w_staker))
         amount_staker = w_staker * amount
         amount_amm = amount - amount_staker
         if is_withdraw:
@@ -657,7 +696,7 @@ class Perpetual:
         s3 = self.idx_s3[self.current_time]
         s2 = self.idx_s2[self.current_time]
         s = pricing_benchmark.get_DF_target_size(K2_pair, k2_trader, r2pair, r3pair, fCoverN,
-                                                 s2, s3, self.collateral_currency)
+                                                 s2, s3, self.collateral_currency, 1/self.params['fInitialMarginRate'])
         self.default_fund_target_size = s
 
     def get_pd(self, k, p, M=None):
@@ -812,24 +851,27 @@ class Perpetual:
         # check if AMM pool needs funds
 
         # gap = target - pool cash
-        gap_amm = self.my_amm.get_amm_pools_gap_to_target()
-        gap_amm_after_fee = gap_amm - protocol_fee
-        gap_df = self.my_amm.get_default_fund_gap_to_target()
-        if gap_amm_after_fee < 0:
-            # amm fund exceeds target, add fee to AMM fund
-            amm_pool_contribution = protocol_fee
-        else:
-            # AMM pool below target after adding fee
+        # gap_amm = self.my_amm.get_amm_pools_gap_to_target()
+        # gap_amm_after_fee = gap_amm - protocol_fee
+        # gap_df = self.my_amm.get_default_fund_gap_to_target()
+        
+        amm_pool_contribution = protocol_fee
+        
+        # if gap_amm_after_fee < 0:
+        #     # amm fund exceeds target, add fee to AMM fund
+        #     amm_pool_contribution = protocol_fee
+        # else:
+        #     # AMM pool below target after adding fee
 
-            if gap_df > 0:
-                # default fund underfunded, add fee to AMM fund only
-                # and leave default fund unchanged
-                amm_pool_contribution = protocol_fee
-            else:
-                # default fund exceeds target, we can use this
-                # excess amount to fill AMM fund
-                df_max_withdrawal = -gap_df
-                amm_pool_contribution = np.min((gap_amm_after_fee, df_max_withdrawal))
+        #     if gap_df > 0:
+        #         # default fund underfunded, add fee to AMM fund only
+        #         # and leave default fund unchanged
+        #         amm_pool_contribution = protocol_fee
+        #     else:
+        #         # default fund exceeds target, we can use this
+        #         # excess amount to fill AMM fund
+        #         df_max_withdrawal = -gap_df * 0
+        #         amm_pool_contribution = np.min((gap_amm_after_fee, df_max_withdrawal))
 
         # assert(self.my_amm.default_fund_cash_cc >= 0)
         # distribute amounts
