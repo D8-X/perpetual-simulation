@@ -42,6 +42,7 @@ class AMM:
         self.trader_dir = []
         self.lp_cc_apy = []
         self.earnings = dict()
+        self.funding_earnings = dict()
         self.attacker_pnl = 0
 
 
@@ -51,7 +52,10 @@ class AMM:
         self.staker_return_ema_lambda = 1 / 30 / 100
         self.staker_return_ema = 0
 
-
+    def set_emergency(self):
+        self.is_emergency = True
+        for p in self.perpetual_list:
+            p.set_emergency_state()
 
     def get_perpetual(self, idx) -> Perpetual:
         return self.perpetual_list[idx]
@@ -74,6 +78,7 @@ class AMM:
             self.default_fund_cash_cc += perp_params['initial_df_cash_cc']
         self.perpetual_list.append(perpetual)
         self.earnings[idx] = 0
+        self.funding_earnings[idx] = 0
         return idx
 
     def inc_time(self):
@@ -90,19 +95,15 @@ class AMM:
     def get_amm_pools_target(self) -> float:
         target = 0
         for p in self.perpetual_list:
-            target += p.amm_pool_target_size
+            target += p.amm_pool_target_size_ema
         return target 
-
+    
     def get_amm_pools_gap_to_target(self) -> float:
         """ missing funds to reach AMM pool target size
         Returns:
             float: missing funds. Negative if excess funds
         """
-        gap = 0
-        for p in self.perpetual_list:
-            d = p.amm_pool_target_size - p.amm_pool_cash_cc
-            gap = gap + d
-        return gap
+        return self.get_amm_pools_target() - self.staker_cash_cc
 
     def get_default_fund_gap_to_target(self) -> float:
         """ missing funds to reach default fund target size
@@ -112,6 +113,8 @@ class AMM:
         total_target = 0
         for p in self.perpetual_list:
             total_target = total_target + p.default_fund_target_size
+        lp_contr = np.max((0,self.staker_cash_cc - self.get_amm_pools_target()))
+        total_target = np.max((0,total_target - lp_contr))
         gap = total_target - self.default_fund_cash_cc
         return gap
 
@@ -123,7 +126,12 @@ class AMM:
         total_target = 0
         for p in self.perpetual_list:
             total_target = total_target + p.default_fund_target_size
-        gap_ratio = self.default_fund_cash_cc/total_target
+        funds = self.default_fund_cash_cc
+        # CHANGE
+        amm_target = self.get_amm_pools_target()
+        if self.staker_cash_cc > amm_target:
+            funds += self.staker_cash_cc - amm_target
+        gap_ratio = funds/total_target
         # if gap_ratio < 0.01:
         #     self.is_emergency = True
         return gap_ratio
@@ -234,18 +242,6 @@ class AMM:
         # distribute cash
         staker.cash_cc -= cash_cc
         self.staker_cash_cc += cash_cc
-        # update pricing cash ratio: 
-        if staker is CommittedStaker:
-            # this cash is used for pricing immediately
-            # pricing_cash_new = pricing_cash_old + delta_cash = ratio_new * cash_new
-            # --> ratio_new = (ratio_old * cash_old + delta_cash) / cash_new
-            self.staker_pricing_cash_ratio = (self.staker_pricing_cash_ratio * (self.staker_cash_cc - cash_cc) + cash_cc) / self.staker_cash_cc
-        else:
-            # the cash is virtual at first, so pricing ratio is adjusted so that
-            # pricing_cash after deposit = pricing cash before deposit
-            # i.e. pricing_cash_new = ratio_new * cash_new = ratio_old * cash_old
-            # --> ratio_new = ratio_old * cash_old / (cash_old + delta_cash)
-            self.staker_pricing_cash_ratio *= (self.staker_cash_cc - cash_cc) / self.staker_cash_cc
         self.last_pricing_cash_update = self.get_timestamp()
 
     def remove_liquidity(self, staker, tokens):
@@ -253,7 +249,6 @@ class AMM:
             return
         if tokens >= staker.share_tokens:
             tokens = staker.share_tokens
-
         # assert(tokens > 0 and tokens <= staker.share_tokens)
         # assert(tokens <= self.share_token_supply)
         if tokens >= self.share_token_supply:
@@ -267,94 +262,10 @@ class AMM:
             staker.share_tokens -= tokens
             self.share_token_supply -= tokens
         
-        staker_pricing_cash_cc = self.staker_pricing_cash_ratio * self.staker_cash_cc
-        # cash_cc = (tokens / self.share_token_supply) * self.staker_cash_cc
-        # burn tokens
-        # staker.share_tokens -= tokens
-        # self.share_token_supply -= tokens
-        # # distribute cash
         staker.cash_cc += cash_cc
         self.staker_cash_cc -= cash_cc
-        # check if there wasn't enough virtual cash
-        if staker_pricing_cash_cc > self.staker_cash_cc:
-            # print(f"Liquidity removed exceeds virtual cash: {cash_cc} > {self.staker_cash_cc + cash_cc - staker_pricing_cash_cc}")
-            # print(f"Total LP={self.staker_cash_cc + cash_cc} = {staker_pricing_cash_cc} + {self.staker_cash_cc + cash_cc - staker_pricing_cash_cc} (P + V)")
-            gap = staker_pricing_cash_cc - self.staker_cash_cc
-            max_gap_to_fill =  self.default_fund_cash_cc # np.max((0, -self.get_default_fund_gap_to_target())) #np.sqrt(self.max_PtoDF_ratio) * self.default_fund_cash_cc
-            if gap > max_gap_to_fill:
-                print(f"DANGER: liquidity removed has price impact! (we're not going to refill everything)")
-                gap = max_gap_to_fill
-            # give each amm pool as much cash as they were using 
-            # from the portion of the pricing pot that was withdrawn
-            for p in self.perpetual_list:
-                delta_cash_cc =  gap / len(self.perpetual_list)
-                p.amm_pool_cash_cc += delta_cash_cc
-                self.default_fund_cash_cc -= delta_cash_cc
-            staker_pricing_cash_cc = self.staker_cash_cc
-
         if self.staker_cash_cc <= 0:
             self.staker_cash_cc = 0
-            self.staker_pricing_cash_ratio = 0
-        else:
-            if staker_pricing_cash_cc > self.staker_cash_cc:
-                print("Really shouldn't be here....")
-                staker_pricing_cash_cc = self.staker_cash_cc
-            self.staker_pricing_cash_ratio = staker_pricing_cash_cc / self.staker_cash_cc
-        self.last_pricing_cash_update = self.get_timestamp()
-
-    
-    def transfer_from_df_to_amm(self, perp, amount, target):
-        if amount <= 0:
-            # no gap to fill
-            return 0
-        # once per block
-        ts_now = self.get_timestamp()
-        if ts_now <= perp.last_df_transfer:
-            return 0
-        scale = np.min((1, (ts_now - perp.last_df_transfer) / self.fund_transfer_convergence_time))
-        # cap amount to transfer
-        transfer_cap = self.max_liquidity_inc_delta * np.min((1, self.get_default_fund_gap_to_target_ratio()))
-        delta_cash_cc = scale * np.min((target, transfer_cap))
-        if delta_cash_cc > amount:
-            delta_cash_cc = amount
-        self.default_fund_cash_cc -= delta_cash_cc
-        perp.amm_pool_cash_cc += delta_cash_cc
-        perp.last_df_transfer = ts_now
-        return delta_cash_cc
-        
-        
-    
-    def increment_pricing_staker_cash(self):
-        # at most one update per block, and only if there is any LP cash deposited
-        ts_now = self.get_timestamp()
-        if ts_now <= self.last_pricing_cash_update or self.staker_cash_cc == 0:
-            return
-        # increase proportionally to time elapsed, but so that in the total convergence time everything is transferred
-        z = np.min((1, (ts_now - self.last_pricing_cash_update) / self.fund_transfer_convergence_time))
-        P_max = self.max_PtoDF_ratio * self.default_fund_cash_cc
-        staker_pricing_cash_cc = self.staker_pricing_cash_ratio * self.staker_cash_cc
-        gap_to_max = P_max - staker_pricing_cash_cc
-        dP = 0
-        if gap_to_max < 0:
-            dP = -z * staker_pricing_cash_cc
-            if dP < gap_to_max:
-                dP = gap_to_max
-        else:
-            target = self.staker_cash_cc if P_max > self.staker_cash_cc else P_max
-            gap_to_target = target - staker_pricing_cash_cc
-            if gap_to_target > 0:
-                dP = z * target
-                if dP > gap_to_target:
-                    dP = gap_to_target
-        max_dP = z * self.max_liquidity_inc_delta
-        if np.abs(dP) > max_dP:
-            dP = np.sign(dP) * max_dP
-        
-        staker_pricing_cash_cc += dP
-        assert(staker_pricing_cash_cc <= self.staker_cash_cc)
-        self.staker_pricing_cash_ratio = staker_pricing_cash_cc / self.staker_cash_cc
-        self.last_pricing_cash_update = ts_now
-
 
 
 

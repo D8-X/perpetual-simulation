@@ -20,21 +20,23 @@ class NoiseTrader(Trader):
         # fix a probability that the trader is long
         self.prob_long = prob_long
         # holding period: 15min-48h
-        self.holding_period_blocks = 60*np.random.uniform(1/4, 48)
-        self.time_last_trade = -self.holding_period_blocks
-        self.time_last_pnl_check = -self.holding_period_blocks
+        self.holding_period_seconds = 60 * np.random.uniform(15, 48 * 60)
+        self.time_last_trade = -self.holding_period_seconds
+        self.time_last_pnl_check = -self.holding_period_seconds
         
         # slippage tolerance:
-        self.slippage_tol  = np.random.uniform(np.max((5 / 10_000, slip_tol - 5 / 10_000)), slip_tol + 5 / 10_000) 
+        self.slippage_tol  =  np.random.uniform(0.0003, 0.0013)  #np.random.uniform(np.max((5 / 10_000, slip_tol - 5 / 10_000)), slip_tol + 5 / 10_000) 
         
         # when to close?
         self.cash_to_open_cc = 0 # to track pnl
-        # stop loss at somewhere between 5% and 20% loss
-        self.stop_loss = np.random.uniform(0.05, 0.20)
-        # take profit at somewhere between 5% and 20% profit
-        self.take_profit = np.random.uniform(0.05, 0.20)
+        # stop loss at somewhere between 5% and 50% loss
+        self.stop_loss = np.random.uniform(0.05, 0.50)
+        # take profit at somewhere between 10% and 100% profit
+        self.take_profit = np.random.uniform(0.10, 1)
         # still need this?
         self.deviation_tol = 0.02
+        # funding rate tol
+        self.funding_rate_tol = np.random.uniform(0.0005, 0.0015)
 
 
     def query_trade_amount(self) -> 'tuple(float, bool)':
@@ -53,13 +55,13 @@ class NoiseTrader(Trader):
 
         if self.position_bc != 0:
             assert(self.cash_to_open_cc > 0)
-            # randmly close if it's been long enough
-            if np.random.uniform(0, 1) < self.prob_trade and self.amm.current_time - self.time_last_trade > self.holding_period_blocks:
+            # try to close with some probability, but not if it hasn't been long enough
+            if np.random.uniform(0, 1) < self.prob_trade and self.amm.current_time - self.time_last_trade > self.holding_period_seconds:
                 # print("Noise trader randomly closes")
                 return (-self.position_bc, True)
             
             # check rough TP/SL closing condition
-            if self.amm.current_time - self.time_last_pnl_check > self.holding_period_blocks / 3:
+            if self.amm.current_time - self.time_last_pnl_check > self.holding_period_seconds / 3:
                 self.time_last_pnl_check = self.amm.current_time
                 exit_balance_cc = (self.position_bc * perp.get_price(-self.position_bc) - self.locked_in_qc)/perp.get_collateral_to_quote_conversion() + self.cash_cc
                 rough_pnl = exit_balance_cc/self.cash_to_open_cc - 1
@@ -77,8 +79,16 @@ class NoiseTrader(Trader):
             # no trade
             return (0, False)
         
-        # maximal position
+        
         dir = 1 if np.random.uniform(0, 1) < self.prob_long else -1
+        # don't open if funding rate is too bad for the chosen direction
+        if dir * perp.get_funding_rate() > self.funding_rate_tol:
+            print(f"dir: {dir}")
+            print(f"fuding rate: {perp.get_funding_rate()}")
+            print(f"tol: {self.funding_rate_tol}")
+            return (0, False)
+        
+        # maximal position
         pos = dir * perp.get_max_leverage_position(self)
         # shrink randomly, not everyone wants to try to trade at max leverage
         pos *= np.random.beta(a=5, b=1)
@@ -93,7 +103,7 @@ class NoiseTrader(Trader):
         if exceeds:
             return (0, False)
         # shrink pos subject to slippage
-        pos = self.get_max_slippage_size(max_slippage=self.slippage_tol, trade_amount_target=pos, tol=0.0010)
+        # pos = self.get_max_slippage_size(max_slippage=self.slippage_tol, trade_amount_target=pos, tol=0.0010)
         # scale down, maybe
         pos = perp.scale_to_max_signed_trader_position(pos) * 0.99
         

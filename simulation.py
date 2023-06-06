@@ -41,7 +41,7 @@ NUM_TRADERS = {
     'BTCUSD': 10,
     'XAUUSD': 0,
     'BNBUSD': 0, 
-    'ETHUSD': 10,
+    'ETHUSD': 0,
     'CHFUSD': 0,
     'GBPUSD': 0,
     'SPYUSD': 0,
@@ -54,7 +54,7 @@ NUM_TRADERS = {
 # new traders join randomly - up to how many each time? 
 # e.g. if we start with N traders and multiplier is M, then there will be in average (M+1) * N traders by the end of the simulation
 # to keep same growth rate but reduced target (e.g. to go from 4 to 2 months and keep all other params the same, use divider = 2)
-GROWTH_DIVIDER = 1
+GROWTH_DIVIDER = 4
 GROWTH_MULTIPLIER = {
     'BTCUSD': 50 // GROWTH_DIVIDER, 
     'XAUUSD': 50 // GROWTH_DIVIDER, 
@@ -70,14 +70,14 @@ GROWTH_MULTIPLIER = {
 
 # how many arb bots we run for each perp - zero is conservative
 BOTS_PER_PERP = {
-    'BTCUSD': 20,
+    'BTCUSD': 0,
     'BNBUSD': 0,
     'XAUUSD': 0,
-    'ETHUSD': 20,
+    'ETHUSD': 0,
     'CHFUSD': 0,
     'GBPUSD': 0,
     'SPYUSD': 0,
-    'MATICUSD': 20,
+    'MATICUSD': 0,
     'LINKUSD': 0,
     'AVAXUSD': 0,
 }
@@ -108,7 +108,7 @@ SIM_PARAMS = dict()
 # how much cash do we give each arbitrage bot?
 SIM_PARAMS['usd_per_bot'] = 2_000 
 
-SIM_PARAMS['df_init_ratio'] = 0.01 # how much of the initial investment is insurance, %
+SIM_PARAMS['df_init_ratio'] = 0.8 # how much of the initial investment is insurance, %
 
 # withdrawing funds automatically - just for educational purposes, we set rate to 0 for now
 SIM_PARAMS['protocol_profit_withdrawal_frequency'] = (60 * 24) * 10 # we try to withdraw every n days (in seconds)
@@ -123,7 +123,7 @@ SIM_PARAMS['animate_premia'] = False # just for testing, do not use
 
 # prob that trader is in a tier that pays zero fees. higher is more conservative
 SIM_PARAMS['prob_best_tier'] = 0 # not used when simulating zero fees
-SIM_PARAMS['trader_slippage_tolerance'] = 15 / 10_000 # this is randomized
+SIM_PARAMS['trader_slippage_tolerance'] = 10 / 10_000 # this is randomized
 
 
 # number of liquidity providers
@@ -162,17 +162,23 @@ def main():
         # (datetime(2022, 7, 20, 0, 0, tzinfo=timezone.utc), datetime(2022, 10, 21, 0, 0, tzinfo=timezone.utc)),
         # (datetime(2022, 4, 12, 0, 0, tzinfo=timezone.utc), datetime(2022, 6, 16, 0, 0, tzinfo=timezone.utc)),
         # (datetime(2022, 6, 12, 0, 0, tzinfo=timezone.utc), datetime(2022, 12, 12, 0, 0, tzinfo=timezone.utc)),
-        (datetime(2022, 5, 12, 0, 0, tzinfo=timezone.utc), datetime(2022, 8, 12, 0, 0, tzinfo=timezone.utc)), 
-        # (datetime(2022, 7, 20, 0, 0, tzinfo=timezone.utc), datetime(2022, 10, 20, 0, 0, tzinfo=timezone.utc)), 
+        # (datetime(2022, 5, 12, 0, 0, tzinfo=timezone.utc), datetime(2022, 8, 12, 0, 0, tzinfo=timezone.utc)), 
+        # (datetime(2022, 7, 20, 0, 0, tzinfo=timezone.utc), datetime(2022, 10, 20, 0, 0, tzinfo=timezone.utc)),
+        (datetime(2022, 9, 15, 0, 0, tzinfo=timezone.utc), datetime(2023, 1, 15, 0, 0, tzinfo=timezone.utc)), 
     ]
 
     # given that a trader is about to open a position, with what probability will it be a long one?
     long_probs = [
-        # 0.35,
-        0.50,
+        0.35,
+        # 0.50,
         # 0.65,
         # 0.30,
         # 0.95,
+    ]
+
+    # total cash brought in by each LP (randomized if not 'committed')
+    cash_per_lp = [
+       len(SYMBOLS) * 300_000,
     ]
 
     # how much liquidity does the protocol have at launch? in dollars
@@ -181,7 +187,7 @@ def main():
         # 50_000_000,
         # 3_000_000,
         # 3 * 250_000,
-        len(SYMBOLS) * 12_500,
+        len(SYMBOLS) * 300_000 * 0.05,
         # 50_000,
         # len(SYMBOLS) * 50_000,
         # len(SYMBOLS) * 1_000_000,
@@ -194,30 +200,27 @@ def main():
         # 1_000,
         # 1_500,
         # 1_200,
-        2_000,
+        # 2_000,
         
         # 2_500,
         # 2_000,
         # 3_000,
         # 3_500,
-        # 5_000,
+        5_000,
     ]
     
     num_trades_per_day = [
         # 0.25,
         # 0.5,
         # 0.75,
-        # 1,
+        1,
         # 1.25,
         # 1.5,
-        2,
+        # 2,
         # 5,
     ]
     
-    # total cash brought in by each LP (randomized)
-    cash_per_lp = [
-        1_000_000,
-    ]
+    
 
     run_configs = itertools.product(seeds, simulation_horizons, long_probs, initial_investments, usds_per_trader, num_trades_per_day, cash_per_lp)
     total_hash = hash(run_configs)
@@ -347,7 +350,7 @@ def simulate(sim_input):
     total_arb_traders = dict()
     total_num_traders = dict()
     for symbol in SYMBOLS:
-        total_noise_traders[symbol] = int(np.ceil(NUM_TRADERS[symbol] * 0.70))
+        total_noise_traders[symbol] = int(np.ceil(NUM_TRADERS[symbol] * 0.90))
         total_momentum_traders[symbol] = NUM_TRADERS[symbol] - total_noise_traders[symbol]
         total_arb_traders[symbol] = BOTS_PER_PERP[symbol]
         total_num_traders[symbol] = total_noise_traders[symbol] + total_momentum_traders[symbol] + total_arb_traders[symbol]
@@ -372,10 +375,9 @@ def simulate(sim_input):
         sim_state[symbol]['cash_per_trader_qc'] = sim_state['usd_per_trader']
 
         perp_params[symbol] = load_perp_params(symbol, COLL)
-        # perp_params[symbol]['perp_amm_cash_cc'] = np.min(
-        #     (perp_params[symbol]['fAMMMinSizeCC'], protocol_cash_cc / len(SYMBOLS)))
         
-        perp_params[symbol]['perp_amm_cash_cc'] = protocol_cash_cc * (1 - sim_state['df_init_ratio']) / len(SYMBOLS)
+        perp_params[symbol]['perp_amm_cash_cc'] = 0
+        perp_params[symbol]['initial_margin_cash_cc'] = protocol_cash_cc * (1 - sim_state['df_init_ratio']) / len(SYMBOLS)
         protocol_cash_cc -= perp_params[symbol]['perp_amm_cash_cc']
         
         # simulation state
@@ -535,7 +537,8 @@ def simulate(sim_input):
                 S3 = perp.get_collateral_price()
                 px0 = 0.5 * (perp.get_price(perp.params['fLotSizeBC']) + perp.get_price(-perp.params['fLotSizeBC']))
                 
-                M = perp.amm_pool_cash_cc
+                # M = perp.amm_pool_cash_cc
+                M = perp.get_LP_cash_for_perp()
                 M_label = "M2" if perp.collateral_currency is CollateralCurrency.BASE else "M1" if perp.collateral_currency is CollateralCurrency.QUOTE else "M3"
                 delta_t = (datetime.now() - run_t0).total_seconds() / 60
                 
@@ -553,18 +556,15 @@ def simulate(sim_input):
                 slippage_summary = " ".join([f"{100 * (perp.get_price(k) - px0)/px0: .3f}({k: .3f})" for k in trades_vec])
                 premium_summary = f"mark={100*(px - S2)/S2: .3f}% slip=[{slippage_summary}](%,amt) "
                 price_summary = f"S2={S2:.1f} "
-                funding_summary = f"{M_label}={M:.2f} ({ 100 * (M / perp.amm_pool_target_size if perp.amm_pool_target_size > 0 else np.inf):3.0f}%) "
-                
+                funds_summary = f"{M_label}={M:.2f}/{perp.amm_pool_target_size_ema:.2f} ({ 100 * (M / perp.amm_pool_target_size_ema if perp.amm_pool_target_size_ema > 0 else np.inf):3.0f}%) "
+                amm_account_summary = f"K2={-perp.amm_trader.position_bc:.2f} L1={-perp.amm_trader.locked_in_qc:.1f} cash={perp.amm_trader.cash_cc:.1f} "
+
                 print(
                     f"{symbol} " \
-                    + premium_summary + price_summary + funding_summary \
-                    + f"K2={-perp.amm_trader.position_bc:.2f} L1={-perp.amm_trader.locked_in_qc:.1f} cash={perp.amm_trader.cash_cc:.1f} "\
+                    + premium_summary + price_summary + funds_summary + amm_account_summary\
                     + f"traders: {perp.get_num_active_traders()}/{total_num_traders[symbol]}, ema={trade_size_ema:.1f}"
                 )
                 
-            
-            
-            
             new_noise_traders = 0
             new_momentum_traders = 0
             if t < 0.75 * time_df.shape[0]:
@@ -575,7 +575,7 @@ def simulate(sim_input):
                 )
                 if traders_joining > 0:
                     for _ in range(traders_joining):
-                        noise_trader = 1 if np.random.uniform() < 0.7 else 0
+                        noise_trader = 1 if np.random.uniform() < 0.9 else 0
                         new_noise_traders += noise_trader
                         new_momentum_traders += 1 - noise_trader
 
@@ -622,9 +622,11 @@ def simulate(sim_input):
             arb_pnl_cc = sum([sim_state[symbol]['arb_pnl'] for symbol in SYMBOLS]) / idx_s3[t]
             arb_locked_usd = sum([sim_state[symbol]['arb_capital_used'] for symbol in SYMBOLS])
             arb_active = sum([sim_state[symbol]['num_arb_traders'] for symbol in SYMBOLS])
+            total_arbs = sum([total_arb_traders[symbol] for symbol in SYMBOLS])
             traders_active = sum([perp.get_num_active_traders() for perp in amm.perpetual_list])
             total_traders = sum([total_num_traders[symbol] for symbol in SYMBOLS])
             DF = amm.default_fund_cash_cc
+            arb_summary = "" if total_arbs == 0 else f"Arb pnl = {arb_pnl_cc:.3f} (${arb_locked_usd / np.max((arb_active, 1)):.0f} locked per bot, ${arb_locked_usd:.0f} total)"
             msg = (
                 f"{COLL} pool @ {time_df[t]}: "\
                 + f"S3={S3:.1f} "\
@@ -634,10 +636,9 @@ def simulate(sim_input):
                 + f"Liquidations = {amm.liquidator_earnings_vault:.3f} ({liquidation_count}) "\
                 + f"Bankrupcies = {sum([sim_state[symbol]['num_replaced_traders'] for symbol in SYMBOLS])}, "\
                 + f"Fees = {amm.fees_earned:.3f} "\
-                + f"Wtihdrawn earnings = {amm.protocol_earnings_vault:.1f} "\
+                + f"Earnings = {amm.protocol_earnings_vault:.1f} "\
                 + f"Num traders = {traders_active}/{total_traders} "\
-                + f"Arb pnl = {arb_pnl_cc:.3f} "\
-                + f"(${arb_locked_usd / np.max((arb_active, 1)):.0f} locked per bot, ${arb_locked_usd:.0f} total)"
+                + arb_summary
             )
             
             print(msg)
@@ -645,13 +646,24 @@ def simulate(sim_input):
             # PnL Stats
             if t > 0:
                 pnl_abs_cc = [f"{name}: {amm.earnings[i]: .3f}" for i, name in enumerate(SYMBOLS)]
+                funding_earnings_cc = [f"{name}: {amm.funding_earnings[i]: .3f}" for i, name in enumerate(SYMBOLS)]
+                volume_summary_cc = "\t".join([f"{s}: {amm.get_perpetual(perps[i]).total_volume_cc * 1e-6:.3f} (m{COLL})" for i, s in enumerate(SYMBOLS)])
+                volume_summary_qc = "\t".join([f"{s}: {amm.get_perpetual(perps[i]).total_volume_qc * 1e-6:.3f} (m{QUOTE})" for i, s in enumerate(SYMBOLS)])
+                print(f"Cumulative traded volume (in {COLL}): {volume_summary_cc}")
+                print(f"Cumulative traded volume (in {QUOTE}): {volume_summary_qc}")
                 print(f"Cumulative pool PnL (in {COLL}): {sum(amm.earnings.values()):.2f} {COLL}, {100 *(sum(amm.earnings.values()) / sum(amm.get_perpetual(perps[i]).total_volume_cc for i in range(len(SYMBOLS)))):.3f} %")
                 print(f"Cumulative PnL by perp (in {COLL}):\t" + "\t".join(pnl_abs_cc))
+                print(f"Cumulative Funding fees by perp (in {COLL}):\t" + "\t".join(funding_earnings_cc))
                 pnl_rel = [
                     f"{name}: {100 * amm.earnings[i] * S3 / amm.get_perpetual(perps[i]).total_volume_qc: .3f}" 
                     for i, name in enumerate(SYMBOLS)
                 ]
+                funding_rel = [
+                    f"{name}: {100 * amm.funding_earnings[i] * S3 / amm.get_perpetual(perps[i]).total_volume_qc: .3f}" 
+                    for i, name in enumerate(SYMBOLS)
+                ]
                 print(f"Cumulative PnL by perp (%, over traded volume in {QUOTE}):\t" + "\t".join(pnl_rel))
+                print(f"Cumulative Funding fees by perp (%, over traded volume in {QUOTE}):\t" + "\t".join(funding_rel))
                 trader_pnl = sum(t.pnl_cc for t in traders if t.position_bc != 0)
                 print(f"Active traders PnL (in {COLL}): {trader_pnl:.1f} (total), {trader_pnl / np.max((1,traders_active)):.1f} (per trader)")
                 # pprint.pprint(report_stats(amm_state.loc[:t], sim_state))
@@ -659,49 +671,11 @@ def simulate(sim_input):
                 print(f"{delta_t:.1f} minutes elapsed, {100.0 * t / time_df.shape[0]:.1f}% complete, approx. {1.1*time_left:.1f} minutes left.")
             print("".join(("-" for _ in range(100))) + "\n")
 
-        # 'animate' AMM depth
-        # if t % 10 == 0 and animate_premia:
-        #     delta_t = (datetime.now() - run_t0).total_seconds() / 60
-        #     ratioDF =  np.round(amm.get_default_fund_gap_to_target_ratio()*100)
-        #     S3 = perp.get_collateral_price()
-        #     DF = amm.default_fund_cash_cc
-           
-        #     for i in range(len(index_vec)):
-        #         perp = amm.get_perpetual(perps[i])
-        #         pos_range = usdrange / perp.get_index_price()
-        #         price_range = np.array([perp.get_price(k) for k in pos_range])
-        #         max_long = np.min((max_usd, perp.get_max_signed_trade_size_for_position(0, 1) * perp.get_index_price()))
-        #         max_short = np.max((min_usd, perp.get_max_signed_trade_size_for_position(0, -1) * perp.get_index_price()))
-        #         axs[i].cla()
-        #         axs[i].plot(usdrange, 100 * (price_range / perp.get_index_price() - 1))
-        #         # axs[i].set_yscale('symlog')
-        #         axs[i].axvline(x=max_long, color='r')
-        #         axs[i].axvline(x=max_short, color='r')
-        #         axs[i].axhline(y=0, color='b')
-        #         axs[i].set_xticks(np.linspace(min_usd, max_usd, 21))
-        #         axs[i].set_xticklabels(np.linspace(min_usd, max_usd, 21), rotation=45)
-        #         axs[i].set(ylabel=f"{index_vec[i]}", ylim=(-1.25, 1.25))
-        #         axs[i].grid(linestyle='--', linewidth=1)
-
-        #     fig.suptitle(f"Premium over index price (%)\n[{delta_t:.1f}] {COLL} pool {time_df[t]}: S3={S3:.1f} DF={DF:.3f} ({ratioDF:3.0f}%)")
-        #     fig.canvas.draw()
-        #     fig.canvas.flush_events()
-
-            # # trader cash
-            # ax_cash.cla()
-            # trader_cash_qc = np.array([trader.cash_cc for trader in traders]) * idx_s3[0]
-            # ax_cash.hist(trader_cash_qc, bins='auto')
-            # ax_cash.grid(linestyle='--', linewidth=1)
-            # ax_cash.ticklabel_format(style='plain')
-            # ax_cash.tick_params(rotation=45)
-            # fig_cash.canvas.draw()
-            # fig_cash.canvas.flush_events()
  
         if amm.is_emergency:
             print("AMM emergency state reached")
             break
 
-        # print(pd.to_datetime(amm.get_timestamp(), unit="s", origin='unix', utc=True))
         amm.inc_time()
 
         if (
@@ -943,9 +917,8 @@ def get_collateral_ccy(symbol, collateral):
         ccy = CollateralCurrency.QUANTO
     return ccy
 
-def draw_cash_sample(expected_cash_qc, k=10):
+def draw_cash_sample(expected_cash_qc, k=5):
     # gamma(k,theta) ~ mean k* theta, variance k * theta^2 = k * (mean / k)^2 = mean / k
-    
     scale = expected_cash_qc * k
     min_cash = np.max((expected_cash_qc / 4, 500)) # no less than $500 per trader
     mean_over_min = (expected_cash_qc - min_cash) / scale
@@ -1161,7 +1134,7 @@ def record_amm_state(t, state, amm, stakers, traders):
     new_state = [
         amm_cash,
         sum((p.amm_trader.cash_cc  for p in amm.perpetual_list)),
-        sum((p.get_pricing_staked_cash_for_perp() for p in amm.perpetual_list)),
+        sum((p.get_LP_cash_for_perp() for p in amm.perpetual_list)),
         amm.staker_cash_cc,
         sum((s.get_position_value_cc() for s in stakers if s.has_staked)),
         amm.default_fund_cash_cc,
@@ -1277,7 +1250,7 @@ def record_perp_state(time_idx, state_dict, perp, sim, traders):
         perp.get_funding_rate(),
         # cash
         perp.amm_pool_cash_cc,
-        perp.get_pricing_staked_cash_for_perp(),
+        perp.get_LP_cash_for_perp(),
 
         # targets
         perp.amm_pool_target_size,

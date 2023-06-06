@@ -103,20 +103,50 @@ def penalization_function(k_ratio):
         return 1 - (1 - np.abs(k_ratio))**2
     return 1
 
+def calculate_insurance(M1, M2, M3, K2, L1, s20, s30, r, sig2, sig3, rho23):
+    assert(M3 == 0)
+    
+    if K2 <= M2 and M1 + L1 >= 0:
+        return 0
+    elif (K2 >= M2) and (M1 + L1 <= 0):
+        return (K2 - M2) * np.exp(r) * s20 - (M1 + L1)
+    
+    Theta = np.log((M1 + L1) / ((K2 - M2) * s20))
+    d1 = (Theta - r + 0.5 * sig2**2) / sig2
+    d2 = (Theta - r - 0.5 * sig2**2) / sig2
+
+    if (K2 > M2) and (M1 + L1 > 0):
+        return (K2 - M2) * np.exp(r) * s20 * (1 - norm.cdf(d2)) - (M1 + L1) * (1 - norm.cdf(d1))
+    else:
+        return (K2 - M2) * np.exp(r) * s20 * norm.cdf(d2) - (M1 + L1) * norm.cdf(d1)
+
+
 def calculate_perp_priceV4(K2, k, L1, s2, s3, sig2, sig3, rho, r, M1, M2, M3, minSpread=0.0001, incentiveSpread=0.0005, k_bar=1):
     # current champion method
     dL = k*s2
     k_star = get_Kstar(s2, s3, M1, M2, M3, K2, L1, sig2, sig3, rho, r)
     if M3==0:
-        # if M1 + s2 * M2 + s3 * M3 < s2 * K2 - L1:
-        #     # Q is already == 1
-        #     print("No-quanto pricing is singular.")
         q, dd = prob_def_no_quanto(K2+k, L1+dL, s2, s3, sig2, sig3, rho, r, M1, M2, M3)
     else:
         q, dd = prob_def_quanto(K2+k, L1+dL, s2, s3, sig2, sig3, rho, r, M1, M2, M3)
     incentive = incentiveSpread * penalization_function(k / k_bar)
-    sgnm = np.sign(k - k_star)
-    px = s2 * (1 + sgnm * q + np.sign(k) * minSpread + incentive)
+    prem = np.sign(k - k_star) * q
+    if K2 > 0 and k > 0:
+        prem = np.max((prem, 0))
+    elif K2 < 0 and k < 0:
+        prem = np.min((prem, 0))
+    px = s2 * (1 + prem + np.sign(k) * minSpread + incentive)
+    return px
+
+
+def calculate_perp_priceV5(K2, k, L1, s2, s3, sig2, sig3, rho, r, M1, M2, M3, minSpread=0.0001, incentiveSpread=0.0005, k_bar=1):
+    if M3 > 0:
+        return calculate_perp_priceV4(K2, k, L1, s2, s3, sig2, sig3, rho, r, M1, M2, M3, minSpread, incentiveSpread, k_bar)
+    I0 = calculate_insurance(M1, M2, M3, K2, L1, s2, s3, r, sig2, sig3, rho)
+    Ik = calculate_insurance(M1, M2, M3, K2 + k, L1 + k * s2, s2, s3, r, sig2, sig3, rho)
+    prem = 0 if I0 == Ik else (Ik - I0) / (k * s2)
+    incentive = incentiveSpread * penalization_function(k / k_bar)
+    px = s2 * (1 + prem + np.sign(k) * minSpread + incentive)
     return px
 
 def calculate_perp_priceV3(K2, k, L1, s2, s3, sig2, sig3, rho, r, M1, M2, M3, minSpread):

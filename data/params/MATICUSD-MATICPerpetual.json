@@ -1,13 +1,13 @@
 {
   "poolName": "MATIC",
-  "fInitialMarginRate": 0.05,
-  "fMaintenanceMarginRate": 0.03,
+  "fInitialMarginRate": 0.1,
+  "fMaintenanceMarginRate": 0.05,
   "fTreasuryFeeRate": 0.000075,
   "fPnLPartRate": 0.000025,
-  "fReferralRebateCC": 0.01,
+  "fReferralRebateCC": 0.25,
   "fLiquidationPenaltyRate": 0.01,
-  "fMinimalSpread": 0.0001,
-  "fIncentiveSpread": 0.00015,
+  "fMinimalSpread": 0.00015,
+  "fIncentiveSpread": 0.0001,
   "fLotSizeBC": 1,
   "fFundingRateClamp": 0.0005,
   "fMarkPriceEMALambda": 0.7,
@@ -15,19 +15,10 @@
   "fSigma3": 0,
   "fRho23": 0,
   "eCollateralCurrency": "BASE",
-  "fStressReturnS2": [
-    -0.20,
-    0.25
-  ],
-  "fStressReturnS3": [
-    0,
-    0
-  ],
+  "fStressReturnS2": [-0.2, 0.25],
+  "fStressReturnS3": [0, 0],
   "fDFCoverNRate": 0.05,
-  "fDFLambda": [
-    0.9995,
-    0.98
-  ],
+  "fDFLambda": [0.9995, 0.98],
   "fAMMTargetDD": [-3.4316144, -2.87816174],
   "fAMMMinSizeCC": 35000,
   "fMinimalTraderExposureEMA": 35000,
