@@ -1,0 +1,14 @@
+[
+  {
+    "name": "EUR",
+    "chainId": 80001,
+    "description": "Pool config for polygon-testnet (zkEVM) with mock-EUR address for margintoken",
+    "iTargetPoolSizeUpdateTime": 28800,
+    "marginTokenName": "EUR",
+    "marginTokenAddress": "",
+    "treasuryAddress": "",
+    "iFundTransferConvergenceHours": 24,
+    "fMaxTransferPerConvergencePeriodCC": 100000,
+    "brokerCollateralLotSize": 100
+  }
+]
