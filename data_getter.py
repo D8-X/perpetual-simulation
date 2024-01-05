@@ -1,6 +1,8 @@
 import glob
 import os
+import re
 import time
+import requests
 from web3 import Web3
 import datetime
 import numpy as np
@@ -133,13 +135,14 @@ def maybe_fetch_chainlink_data(
                 df.drop_duplicates(subset='roundId', keep='first', inplace=True)
                 df.sort_values('timestamp', ascending=False, inplace=True)
                 df.to_csv(filename)
-                print(f"Progress saved to file {tmp_filename}")
+                print(f"Progress saved to file {filename}")
                 result = []
                 if tmp_filename is not None and os.path.exists(tmp_filename) and tmp_filename != filename:
                     os.remove(tmp_filename)
                     print(f"Removed temporary file {tmp_filename}")
                 tmp_filename = filename
                 
+        # roundId -= np.random.randint(1, 60)
         roundId -= 1
 
     fromdate = dt
@@ -224,6 +227,60 @@ def fetch_bitmex_data(
     print(f"Bitmex data successfully saved to {filename}")
 
 
+def get_pyth_data(symbol, from_datetime, to_datetime):
+
+    print(f"./data/index/pyth/{re.sub('/|^[a-zA-Z]+.', '', symbol)}")
+    # https://hermes.pyth.network/api/get_price_feed?id=d6f83dfeaff95d596ddec26af2ee32f391c206a183b161b7980821860eeef2f5&publish_time=1704379736
+    reqs = 0
+    start_ts = time.time()
+    from_ts = int((datetime.datetime.timestamp(from_datetime) // 60) * 60)
+    to_ts = int((datetime.datetime.timestamp(to_datetime) // 60) * 60)
+    assert(from_ts + 60 < to_ts)
+    
+
+    # df = pd.DataFrame(columns=['timestamp', 'datetime', 'price'])
+    ts_range = np.arange(from_ts, to_ts, 86400)
+    # results = np.zeros((ts_range.shape[0], 2))
+    
+    t = []
+    p = []
+
+    for ts in range(from_ts, to_ts, 86400):
+        # endpoint = f"https://hermes.pyth.network/api/get_price_feed?id={id}&publish_time={ts_range[i]}"
+        endpoint = f"https://benchmarks.pyth.network/v1/shims/tradingview/history?symbol={symbol}&resolution=1&from={ts}&to={ts+86400}"
+
+        reqs += 1
+        data = requests.get(endpoint).json()
+        # print(data)
+
+        if 'error' in data: # and data['error'] == 'too many requests':
+            print(data['error'])
+            # print("rate limit - waiting 60 seconds...")
+            time.sleep(60)
+            print("back")
+            reqs = 0
+        elif len(data['t']) > 0:
+            price, publish_ts, start_price, start_publish_ts = data['c'][-1], data['t'][-1],  data['c'][0], data['t'][0]
+            print(f"{datetime.datetime.fromtimestamp(start_publish_ts)}: {start_price}  ---  {datetime.datetime.fromtimestamp(publish_ts)}: {price}")
+            # results[i,0] = publish_ts
+            # results[i,1] = price
+            t.extend(data['t'])
+            p.extend(data['c'])
+        else:
+            print(f"No data: {datetime.datetime.fromtimestamp(ts)} - {datetime.datetime.fromtimestamp(ts+86400)}")
+        
+        # rate limit: 30 reqs in 10 secs
+        if reqs >= 30:
+            time.sleep(10)
+            # ts_now = time.time()
+            # wait_time = start_ts + 5 - ts_now if ts_now - start_ts < 5 else 1
+            # time.sleep(wait_time)
+            reqs = 0
+            start_ts = time.time()
+    # np.save(f"./{id}", results)
+    df = pd.DataFrame({"timestamp": t, "price": p})
+    df.to_csv(f"./data/index/pyth/{re.sub('/|^[a-zA-Z]+.', '', symbol)}_All_{datetime.datetime.fromtimestamp(t[0]).date()}_{datetime.datetime.fromtimestamp(t[-1]).date()}.csv")
+    
 def summarize_data(data, n_points=10_000, plot=True):
     # data.columns = roundId,timestamp,datetime,price
     # how many observations in a day?
@@ -282,19 +339,40 @@ if __name__ == "__main__":
     # quit()
     
 
-    # BTC
+    # # BTC
     # df = maybe_fetch_chainlink_data(
     #     'BTCUSD_BSC_Mainnet', 
     #     'https://binance.nodereal.io', 
     #     '0x264990fbd0A4796A3E3d8E37C4d5F87a3aCa5Ebf',
     #     fromdate=datetime.datetime(2022, 1, 1)
     # )
-    # # ETH
+    # ETH
     # df = maybe_fetch_chainlink_data(
     #     'ETHUSD_BSC_Mainnet', 
     #     'https://binance.nodereal.io', 
     #     '0x9ef1B8c0E4F7dc8bF5719Ea496883DC6401d5b2e',
-    #     fromdate=datetime.datetime(2022, 1, 1)
+    #     fromdate=datetime.datetime(2023, 1, 1)
+    # )
+    # # SOL
+    # df = maybe_fetch_chainlink_data(
+    #     'SOLUSD_BSC_Mainnet', 
+    #     'https://binance.nodereal.io', 
+    #     '0x0E8a53DD9c13589df6382F13dA6B3Ec8F919B323',
+    #     fromdate=datetime.datetime(2023, 1, 1)
+    # )
+    # # EUR
+    # df = maybe_fetch_chainlink_data(
+    # 'EURUSD_BSC_Mainnet', 
+    # 'https://binance.nodereal.io', 
+    # '0x0bf79F617988C472DcA68ff41eFe1338955b9A80',
+    # fromdate=datetime.datetime(2023, 1, 1)
+    # )
+    # JPY
+    # df = maybe_fetch_chainlink_data(
+    # 'JPYUSD_BSC_Mainnet', 
+    # 'https://binance.nodereal.io', 
+    # '0x22Db8397a6E77E41471dE256a7803829fDC8bC57',
+    # fromdate=datetime.datetime(2023, 1, 1)
     # )
     # TSLA
     # df = maybe_fetch_chainlink_data(
@@ -323,14 +401,14 @@ if __name__ == "__main__":
     #     'XAGUSD_BSC_Mainnet', 
     #     'https://bsc-dataseed.binance.org/', 
     #     '0x817326922c909b16944817c207562B25C4dF16aD',
-    #     fromdate=datetime.datetime(2022, 1, 1)
+    #     fromdate=datetime.datetime(2023, 1, 1)
     # )
     # CHF
     # df = maybe_fetch_chainlink_data(
     #     'CHFUSD_BSC_Mainnet', 
     #     'https://binance.nodereal.io', 
     #     '0x964261740356cB4aaD0C3D2003Ce808A4176a46d',
-    #     fromdate=datetime.datetime(2022, 6, 1)
+    #     fromdate=datetime.datetime(2023, 1, 1)
     # )
     # # SPY
     # df = maybe_fetch_chainlink_data(
@@ -345,8 +423,18 @@ if __name__ == "__main__":
     #     'GBPUSD_BSC_Mainnet', 
     #     'https://binance.nodereal.io', 
     #     '0x8FAf16F710003E538189334541F5D4a391Da46a0',
-    #     fromdate=datetime.datetime(2022, 6, 1)
+    #     fromdate=datetime.datetime(2023, 1, 1)
     # )
+
+    # # EUR on Polygon
+    # df = maybe_fetch_chainlink_data(
+    #     'EURUSD_Polygon_Mainnet', 
+    #     'https://polygon-rpc.com/', 
+    #     '0x73366Fe0AA0Ded304479862808e02506FE556a98',
+    #     fromdate=datetime.datetime(2023, 1, 1)
+    # )
+
+
     # BTC on Polygon
     # df = maybe_fetch_chainlink_data(
     #     'BTCUSD_Polygon_Mainnet', 
@@ -354,20 +442,19 @@ if __name__ == "__main__":
     #     '0xc907E116054Ad103354f2D350FD2514433D57F6f',
     #     fromdate=datetime.datetime(2022, 9, 15)
     # )
-    # ETH on Polygon
+    # # ETH on Polygon
     # df = maybe_fetch_chainlink_data(
     #     'ETHUSD_Polygon_Mainnet', 
     #     'https://polygon-rpc.com/', 
     #     '0xF9680D99D6C9589e2a93a78A04A279e509205945',
-    #     toroundID=36893488147422759218,
-    #     fromdate=datetime.datetime(2022, 11, 1)
+    #     fromdate=datetime.datetime(2023, 1, 1)
     # )
     # # CHF on Polygon # not slow
     # df = maybe_fetch_chainlink_data(
     #     'CHFUSD_Polygon_Mainnet', 
     #     'https://polygon-rpc.com/', 
     #     '0xc76f762CedF0F78a439727861628E0fdfE1e70c2',
-    #     fromdate=datetime.datetime(2022, 1, 1)
+    #     fromdate=datetime.datetime(2023, 1, 1)
     # )
     
     # # AVAX on Polygon: 0xe01eA2fbd8D76ee323FbEd03eB9a8625EC981A10
@@ -391,7 +478,7 @@ if __name__ == "__main__":
     #     'GBPUSD_Polygon_Mainnet', 
     #     'https://polygon-rpc.com/', 
     #     '0x099a2540848573e94fb1Ca0Fa420b00acbBc845a',
-    #     fromdate=datetime.datetime(2022, 1, 1)
+    #     fromdate=datetime.datetime(2023, 1, 12)
     # )
     
     # # Gold on Polygon
@@ -407,7 +494,7 @@ if __name__ == "__main__":
     #     'MATICUSD_BSC_Mainnet', 
     #     'https://binance.nodereal.io', 
     #     '0x7CA57b0cA6367191c94C8914d7Df09A57655905f',
-    #     fromdate=datetime.datetime(2022, 1, 1)
+    #     fromdate=datetime.datetime(2023, 1, 1)
     # )
 
     # # LINK on BSC
@@ -417,14 +504,15 @@ if __name__ == "__main__":
     #     '0xca236E327F629f9Fc2c30A4E95775EbF0B89fac8',
     #     fromdate=datetime.datetime(2022, 6, 1)
     # )
-    df = pd.read_csv("./data/index/chainlink/MATICUSD_BSC_Mainnet_2021-12-31_2023-01-11.csv")[['roundId', 'timestamp', 'datetime', 'price']]
-    df['datetime'] = pd.to_datetime(df['datetime'])
-    df['datetime'] = df['datetime'].apply(lambda x: x.replace(tzinfo=pytz.utc))
-    summarize_data(df, n_points=50_000)
+    # df = pd.read_csv("./data/index/chainlink/GBPUSD_Polygon_Mainnet_2023-01-11_2023-01-17.csv")[['roundId', 'timestamp', 'datetime', 'price']]
+    # df['datetime'] = pd.to_datetime(df['datetime'])
+    # df['datetime'] = df['datetime'].apply(lambda x: x.replace(tzinfo=pytz.utc))
+    # summarize_data(df, n_points=50_000)
     
     #  maybe_fetch_chainlink_data(4, fromdate=datetime.date(2021, 11, 1), toroundID=36893488147419285875) #, todate=datetime.date(2022, 3, 17))
     # Mainnet bitmex
     # fetch_bitmex_data(1, fromdate=datetime.date(2021, 1, 1), todate=datetime.date(2022, 3, 17))
-    # TODO: bybit
+    
+    get_pyth_data("FX.GBP/USD", datetime.datetime(2023, 9, 1), datetime.datetime(2024, 1, 4))
         
     
