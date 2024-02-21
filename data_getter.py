@@ -513,6 +513,6 @@ if __name__ == "__main__":
     # Mainnet bitmex
     # fetch_bitmex_data(1, fromdate=datetime.date(2021, 1, 1), todate=datetime.date(2022, 3, 17))
     
-    get_pyth_data("FX.GBP/USD", datetime.datetime(2023, 9, 1), datetime.datetime(2024, 1, 4))
+    get_pyth_data("Crypto.BTC/USD", datetime.datetime(2023, 9, 1), datetime.datetime(2024, 2, 20))
         
     

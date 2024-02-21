@@ -75,7 +75,7 @@ class Perpetual:
         self.current_locked_in_value_EMA = [-params['fMinimalAMMExposureEMA'], params['fMinimalAMMExposureEMA']]
         self.premium_rate = idx_s2*0
         # targets
-        self.amm_pool_target_size = self.get_amm_pool_size_for_dd(self.params['fAMMTargetDD'][0])
+        self.amm_pool_target_size = self.get_amm_pool_size_for_dd(self.params['fAMMTargetDD'])
         self.amm_pool_target_size_ema = self.amm_pool_target_size # equal at the start
         self.update_DF_size_target()
 
@@ -143,13 +143,16 @@ class Perpetual:
         if self.is_emergency:
             return
         rate = self.get_funding_rate()
+        assert(rate * self.amm_trader.position_bc <= 0)
         coupon_abs = rate * np.abs(trader.position_bc)
         if coupon_abs == 0:
             return
         fxb2c = self.get_base_to_collateral_conversion(False)
         coupon = np.sign(trader.position_bc) * coupon_abs * fxb2c
-        if coupon > trader.cash_cc:
-            coupon = trader.cash_cc
+        # if coupon > trader.cash_cc:
+        #     print(f"Funding fee higher than trader margin!! rate = {rate}, fee = {coupon}, margin = {trader.cash_cc}, trader = {trader.id}")
+        #     coupon = trader.cash_cc
+            
         trader.cash_cc -= coupon
         self.transfer_cash_to_margin(coupon)
         self.my_amm.funding_earnings[self.my_idx] += coupon
@@ -337,13 +340,15 @@ class Perpetual:
         c = self.params['fFundingRateClamp']
         K2 = -self.amm_trader.position_bc
         rate = np.max((premium_rate, c)) + np.min((premium_rate, -c)) + np.sign(K2)*0.0001
+        rate = np.max((rate, 0.0001)) if K2 > 0 else np.min((rate, -0.0001))
         rate = rate * self.glbl_params['block_time_sec']/(8*60*60)
-        rate = np.max((rate, 0)) if K2 > 0 else np.min((rate, 0))
         max_rate = (self.params['fInitialMarginRate']-
                     self.params['fMaintenanceMarginRate'])*0.9
         min_rate = -max_rate
         rate = np.max((rate, min_rate)) if rate < 0 else np.min(
             (rate, max_rate))
+        if (rate > 0 and self.amm_trader.position_bc) > 0 or (rate < 0 and self.amm_trader.position_bc < 0):
+            print(f"Bad funding rate sign!! rate = {rate}, K2 = {-self.amm_trader.position_bc}")
         return rate
 
     def get_base_to_collateral_conversion(self, is_mark_price: bool):
@@ -585,7 +590,7 @@ class Perpetual:
         """Updates amm_pool_target_size and amm_pool_target_size_ema
         """
         if not dd:
-            dd = self.params['fAMMTargetDD'][0]
+            dd = self.params['fAMMTargetDD']
 
         self.amm_pool_target_size = self.get_amm_pool_size_for_dd(dd)
         # ema_1 = L ema_0 + (1-L) * obs_1
@@ -671,10 +676,10 @@ class Perpetual:
     def trade(self, trader: 'Trader', amount_bc: float, is_close_only: bool):
         if self.is_emergency:
             return None
-        if trader.cash_cc <= 0:
-            print(f"Trade rejected:  {trader.__class__.__name__} does not have cash left: {trader.cash_cc}")
-            # can't trade without cash
-            return None
+        # if trader.cash_cc <= 0 and not is_close_only:
+        #     print(f"Trade rejected:  {trader.__class__.__name__} does not have cash left: {trader.cash_cc}")
+        #     # can't trade without cash
+        #     return None
         if np.abs(amount_bc) < self.params['fLotSizeBC']:
             print(f"Trade rejected: {self.symbol} {trader.__class__.__name__} tried to trade less than one lot: {amount_bc} < {self.params['fLotSizeBC']}")
             return None
@@ -804,7 +809,7 @@ class Perpetual:
         book the trade between AMM and trader
         """
         assert(not np.isnan(price_qc))
-        assert(not np.isnan(amount_bc))
+        assert(not np.isnan(amount_bc) and np.abs(amount_bc) > 0)
         if is_close_only:
             max_amount = np.abs(trader.position_bc)
             assert(np.abs(amount_bc) <= max_amount)
@@ -830,6 +835,8 @@ class Perpetual:
         assert(not np.isnan(delta_locked_value))
         assert(not np.isnan(delta_cash))
         assert(not np.isnan(amount_bc))
+
+
         self.updateMargin(trader, amount_bc, delta_cash,
                           delta_locked_value)
         self.total_volume_bc += np.abs(amount_bc)
@@ -856,6 +863,7 @@ class Perpetual:
         self.__updateTraderMargin(
             trader, amount_bc, delta_cash, delta_locked_value)
         # amm margin
+        assert(np.abs(amount_bc) > 0)
         self.__updateTraderMargin(
             self.amm_trader, -amount_bc, -delta_cash, -delta_locked_value)
         # record pnl
@@ -922,8 +930,30 @@ class Perpetual:
         delta = np.sign(delta) * np.min((np.abs(pos), np.abs(delta)))
 
         return delta
+    
+    def pay_liquidation_penalty(self, liq_amount_bc, trader: Trader):
+        remaining_mgn = trader.get_available_margin(self, False, True)
+        if remaining_mgn < 0:
+            remaining_mgn = 0
+        b2c = self.get_base_to_collateral_conversion(False)
+        penalty_cc = np.abs(liq_amount_bc) * self.params['fLiquidationPenaltyRate'] * b2c
+        if penalty_cc > remaining_mgn:
+            penalty_cc = remaining_mgn
+        self.__updateTraderMargin(trader, 0, -penalty_cc, 0)
+        # distribute penalty
+        amount_liquidator = penalty_cc / 2
+        amount_default_fund = penalty_cc - amount_liquidator
+        
+        self.my_amm.liquidator_earnings_vault += amount_liquidator
+        # pay amount to default fund
+        self.my_amm.default_fund_cash_cc += amount_default_fund
+        
+        # record keeping
+        self.my_amm.earnings[self.my_idx] += amount_default_fund
+        return (penalty_cc, remaining_mgn)
 
-    def liquidate(self, trader) -> None:
+
+    def liquidate(self, trader) -> bool:
 
         # rebalance perpetual because of price moves since last rebalance
         # rebalance perpetual updates the mark price
@@ -940,33 +970,19 @@ class Perpetual:
         (delta_cash, is_open) = self.book_trade_with_amm(
             trader, px, liq_amount_bc, True)
 
-        # pay liquidation penalty
-        penalty_bc = np.abs(liq_amount_bc) * self.params['fLiquidationPenaltyRate']
-        penalty_cc = self.get_base_to_collateral_conversion(False) * penalty_bc
-        # check if trader is bankrupt
-        mgn = np.max((0, trader.get_margin_balance_cc(self)))
-        if penalty_cc >= mgn:
-            trader.set_active_status(False)
-            penalty_cc = mgn
-        # update trader margin
-        trader.cash_cc = trader.cash_cc - penalty_cc
-        # distribute penalty
-        amount_liquidator = penalty_cc / 2
-        amount_default_fund = penalty_cc / 2
+        penalty_cc, remaining_mgn_cc = self.pay_liquidation_penalty(liq_amount_bc, trader)
         
-        self.my_amm.liquidator_earnings_vault += amount_liquidator
-        # pay amount to default fund
-        self.my_amm.default_fund_cash_cc += amount_default_fund
-        
-        # record keeping
-        self.my_amm.earnings[self.my_idx] += amount_default_fund
         # rebalance perpetual because of margin account changes since last rebalance
         self.rebalance_perpetual()
         # pay regular trading fees/rebalance AMM cash
-        self.__distribute_fees(trader, liq_amount_bc)
+        if remaining_mgn_cc > penalty_cc:
+            self.__distribute_fees(trader, liq_amount_bc)
         
         trade_cash_after = trader.cash_cc
         trader.notify_liquidation(liq_amount_bc, px, np.abs(trade_cash_after - trade_cash_before))
+
+        if sum(self.trader_status.values()) < 1:
+            assert(np.abs(self.amm_trader.position_bc) < self.params['fLotSizeBC'])
 
         return True
 

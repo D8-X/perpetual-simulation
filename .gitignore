@@ -9,3 +9,4 @@ results/sim_*.csv
 *.out
 *.gz
 inter/*
+.ipynb_checkpoints/*

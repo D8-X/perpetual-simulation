@@ -30,42 +30,52 @@ from joblib import Parallel, delayed
 
 
 # Perps we can simulate
-INDEX = ['BTC', 'ETH', 'XAU', 'BNB', 'CHF', 'GBP', 'SPY', 'MATIC', 'LINK', 'AVAX']
+INDEX = ['BTC', 'ETH', 'XAU', 'BNB', 'CHF', 'GBP', 'EUR', 'JPY', 'SPY', 'MATIC', 'LINK', 'AVAX', 'SOL', 'OKB', 'PEPE']
 
 # This simulation's quote and collateral currency
 QUOTE = 'USD'
-COLL = 'MATIC'
+COLL = 'USD'
 
 # traders that join on day 1
 NUM_TRADERS = {
     'BTCUSD': 10,
     'XAUUSD': 0,
     'BNBUSD': 0, 
-    'ETHUSD': 0,
+    'ETHUSD': 10,
     'CHFUSD': 0,
+    'EURUSD': 0,
     'GBPUSD': 0,
+    'JPYUSD': 0,
     'SPYUSD': 0,
     'TSLAUSD': 0,
-    'MATICUSD': 10,
+    'MATICUSD': 0,
     'LINKUSD': 0,
     'AVAXUSD': 0,
+    'SOLUSD': 0,
+    'OKBUSD': 0,
+    'PEPEUSD': 10
 }
 
 # new traders join randomly - up to how many each time? 
 # e.g. if we start with N traders and multiplier is M, then there will be in average (M+1) * N traders by the end of the simulation
 # to keep same growth rate but reduced target (e.g. to go from 4 to 2 months and keep all other params the same, use divider = 2)
-GROWTH_DIVIDER = 4
+GROWTH_DIVIDER = 3
 GROWTH_MULTIPLIER = {
     'BTCUSD': 50 // GROWTH_DIVIDER, 
     'XAUUSD': 50 // GROWTH_DIVIDER, 
     'BNBUSD': 50 // GROWTH_DIVIDER,  
     'ETHUSD': 50 // GROWTH_DIVIDER, 
     'CHFUSD': 50 // GROWTH_DIVIDER, 
+    'EURUSD': 50 // GROWTH_DIVIDER,
+    'JPYUSD': 50 // GROWTH_DIVIDER,
     'GBPUSD': 50 // GROWTH_DIVIDER, 
     'SPYUSD': 50 // GROWTH_DIVIDER,
     'MATICUSD': 50 // GROWTH_DIVIDER,
     'LINKUSD': 50 // GROWTH_DIVIDER,
     'AVAXUSD': 50 // GROWTH_DIVIDER,
+    'SOLUSD': 50 // GROWTH_DIVIDER,
+    'OKBUSD': 50 // GROWTH_DIVIDER,
+    'PEPEUSD': 50 // GROWTH_DIVIDER
 }
 
 # how many arb bots we run for each perp - zero is conservative
@@ -75,25 +85,35 @@ BOTS_PER_PERP = {
     'XAUUSD': 0,
     'ETHUSD': 0,
     'CHFUSD': 0,
+    'EURUSD': 0,
+    'JPYUSD': 0,
     'GBPUSD': 0,
     'SPYUSD': 0,
     'MATICUSD': 0,
     'LINKUSD': 0,
     'AVAXUSD': 0,
+    'SOLUSD': 0,
+    'OKBUSD': 0,
+    'PEPEUSD': 0
 }
 
 # Chainlink provides data from multiple networks
 NETWORK = {
-    'BTCUSD': 'BSC_Mainnet', 
+    'BTCUSD': 'All', 
     'XAUUSD': 'BSC_Mainnet', 
     'BNBUSD': 'BSC_Mainnet', 
-    'ETHUSD': 'BSC_Mainnet',
-    'GBPUSD': 'BSC_Mainnet',
+    'ETHUSD': 'All',
+    'GBPUSD': 'All',
     'SPYUSD': 'BSC_Mainnet',
+    'SOLUSD': 'BSC_Mainnet',
     'CHFUSD': 'Polygon',
-    'MATICUSD': 'BSC_Mainnet',
+    'EURUSD': 'BSC_Mainnet',
+    'JPYUSD': 'BSC_Mainnet',
+    'MATICUSD': 'All',
     'LINKUSD': 'BSC_Mainnet',
     'AVAXUSD': 'Avalanche_Mainnet',
+    'OKBUSD': 'All',
+    'PEPEUSD': 'All',
 }
 
 # when a trader goes bankrupt, a new one joins - up to how many?
@@ -142,7 +162,7 @@ SIM_PARAMS['log_every'] = 1_000
 POSITIONS_WATCH = dict()
 
 # Parallelize run?
-RUN_PARALLEL = False
+RUN_PARALLEL = True
 
 def main():
     all_runs_t0 = datetime.now()    
@@ -150,9 +170,9 @@ def main():
     # seed for cash samples, random agent trading order, random agent preferences
     seeds = [
         # 123,
-        # 345,
+        345,
         # 567,
-        42, 
+        # 42, 
         # 31415,
         # 66260,
     ]
@@ -164,21 +184,21 @@ def main():
         # (datetime(2022, 6, 12, 0, 0, tzinfo=timezone.utc), datetime(2022, 12, 12, 0, 0, tzinfo=timezone.utc)),
         # (datetime(2022, 5, 12, 0, 0, tzinfo=timezone.utc), datetime(2022, 8, 12, 0, 0, tzinfo=timezone.utc)), 
         # (datetime(2022, 7, 20, 0, 0, tzinfo=timezone.utc), datetime(2022, 10, 20, 0, 0, tzinfo=timezone.utc)),
-        (datetime(2022, 9, 15, 0, 0, tzinfo=timezone.utc), datetime(2023, 1, 15, 0, 0, tzinfo=timezone.utc)), 
+        (datetime(2023, 9, 15, 0, 0, tzinfo=timezone.utc), datetime(2023, 12, 15, 0, 0, tzinfo=timezone.utc)), 
     ]
 
     # given that a trader is about to open a position, with what probability will it be a long one?
     long_probs = [
-        0.35,
-        # 0.50,
-        # 0.65,
+        # 0.30,
+        0.50,
+        0.70,
         # 0.30,
         # 0.95,
     ]
 
     # total cash brought in by each LP (randomized if not 'committed')
     cash_per_lp = [
-       len(SYMBOLS) * 300_000,
+       len(SYMBOLS) * 210_000,
     ]
 
     # how much liquidity does the protocol have at launch? in dollars
@@ -187,7 +207,7 @@ def main():
         # 50_000_000,
         # 3_000_000,
         # 3 * 250_000,
-        len(SYMBOLS) * 300_000 * 0.05,
+        len(SYMBOLS) *10_000,
         # 50_000,
         # len(SYMBOLS) * 50_000,
         # len(SYMBOLS) * 1_000_000,
@@ -198,24 +218,24 @@ def main():
     # distribution is fat tailed
     usds_per_trader = [
         # 1_000,
-        # 1_500,
+        1_500,
         # 1_200,
-        # 2_000,
+        2_000,
         
         # 2_500,
         # 2_000,
         # 3_000,
         # 3_500,
-        5_000,
+        # 5_000,
     ]
     
     num_trades_per_day = [
         # 0.25,
         # 0.5,
-        # 0.75,
-        1,
+        0.75,
+        # 1,
         # 1.25,
-        # 1.5,
+        1.5,
         # 2,
         # 5,
     ]
@@ -499,7 +519,11 @@ def simulate(sim_input):
         
         # trading happens
         trading_starts = time.time()
+        # for debugging:
+        perp = traders[0].get_perpetual()
+
         traders_pay_funding(traders)
+
         liquidation_count += traders_liquidate(traders, sim=sim_state)
         trades_so_far = sim_state[symbol]['num_trades']
         traders_trade(traders, amm, sim_state, cex_ts)
@@ -651,7 +675,7 @@ def simulate(sim_input):
                 volume_summary_qc = "\t".join([f"{s}: {amm.get_perpetual(perps[i]).total_volume_qc * 1e-6:.3f} (m{QUOTE})" for i, s in enumerate(SYMBOLS)])
                 print(f"Cumulative traded volume (in {COLL}): {volume_summary_cc}")
                 print(f"Cumulative traded volume (in {QUOTE}): {volume_summary_qc}")
-                print(f"Cumulative pool PnL (in {COLL}): {sum(amm.earnings.values()):.2f} {COLL}, {100 *(sum(amm.earnings.values()) / sum(amm.get_perpetual(perps[i]).total_volume_cc for i in range(len(SYMBOLS)))):.3f} %")
+                print(f"Cumulative pool PnL (in {COLL}): {sum(amm.earnings.values()):.2f} {COLL}, {100 *(sum(amm.earnings.values()) / (1+sum(amm.get_perpetual(perps[i]).total_volume_cc for i in range(len(SYMBOLS))))):.3f} %")
                 print(f"Cumulative PnL by perp (in {COLL}):\t" + "\t".join(pnl_abs_cc))
                 print(f"Cumulative Funding fees by perp (in {COLL}):\t" + "\t".join(funding_earnings_cc))
                 pnl_rel = [
@@ -773,7 +797,7 @@ def init_index_data(from_date, to_date, reload=False, symbol : str|list='BTCUSD'
     for sym in symbol:
         df_idx_s2[sym] = load_price_data(
             sym, 
-            source="chainlink", 
+            source="pyth", 
             network=NETWORK[sym], 
             from_date=from_date, 
             to_date=to_date
@@ -787,7 +811,7 @@ def init_index_data(from_date, to_date, reload=False, symbol : str|list='BTCUSD'
     else:
         df_idx_s3 = load_price_data(
             f"{collateral}USD", 
-            source="chainlink", 
+            source="pyth", 
             network=NETWORK[f"{collateral}USD"], 
             from_date=from_date, 
             to_date=to_date
@@ -799,7 +823,7 @@ def init_index_data(from_date, to_date, reload=False, symbol : str|list='BTCUSD'
     for sym in symbol:
         df_perppx[sym] = load_price_data(
             sym, 
-            source="chainlink", 
+            source="pyth", 
             network=NETWORK[sym], 
             from_date=from_date, 
             to_date=to_date
@@ -998,6 +1022,8 @@ def traders_trade(traders, amm, sim, cex_ts):
         symbol = SYMBOLS[perp_idx]
         
         if not is_active:
+            # if np.abs(trader.position_bc) > perp.params['fLotSizeBC']:
+            #     print(f"Inactive with open position??!!")
             sim[symbol]['num_bankrupt_traders'] += 1
             if sim[symbol]['num_replaced_traders'] < sim[symbol]['max_trader_replacements']:
                 # replace the trader
@@ -1061,6 +1087,8 @@ def traders_liquidate(traders, do_print=False, update_sim=True, sim: dict|None=N
             is_long = traders[k].position_bc > 0
             liq = perpetual.liquidate(traders[k])
             if liq:
+                # if traders[k].cash_cc <= 0:
+                #     print(f"Full liquidation: trader id {traders[k].id}")
                 num_liquidated += 1
                 if update_sim and not sim is None:
                     sim[SYMBOLS[traders[k].perp_idx]]['num_trades'] += 1
@@ -1164,8 +1192,7 @@ def get_perp_state_keys(perp):
 
         # targets
         'perp_amm_target',
-        'perp_amm_target_baseline',
-        'perp_amm_target_stress',
+        'perp_amm_target_spot',
         'perp_df_target',
         'num_noise_traders',
         'num_momentum_traders',
@@ -1254,8 +1281,7 @@ def record_perp_state(time_idx, state_dict, perp, sim, traders):
 
         # targets
         perp.amm_pool_target_size,
-        perp.get_amm_pool_size_for_dd(perp.params['fAMMTargetDD'][0]),
-        perp.get_amm_pool_size_for_dd(perp.params['fAMMTargetDD'][1]),
+        perp.get_amm_pool_size_for_dd(perp.params['fAMMTargetDD']),
         perp.default_fund_target_size,
         sim['num_noise_traders'],
         sim['num_momentum_traders'],

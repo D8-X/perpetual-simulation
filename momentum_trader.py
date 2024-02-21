@@ -34,10 +34,10 @@ class MomentumTrader(Trader):
         if not self.is_active:
             return (0, False)
         
-        if self.cash_cc < 0:
-            if self.position_bc != 0:
-                print(f"{self.__name__} should have been liquidated! position:{self.position_bc}, cash={self.cash_cc}.")
-            return (0, False)
+        # if self.get_margin_balance_cc() < 0:
+        #     if self.position_bc != 0:
+        #         print(f"{self.__name__} should have been liquidated! position:{self.position_bc}, cash={self.cash_cc}, bal={self.get_margin_balance_cc()}.")
+        #     return (0, False)
         
         
 
