@@ -1,4 +1,5 @@
-import { require } from "./utils";
+import { Perpetual } from "./Perpetual";
+import { AMMPerpLogic, require } from "./utils";
 
 export interface LiquidityPoolData {
   isRunning; // state
@@ -34,34 +35,48 @@ export interface Block {
 }
 
 export class LiquidityPool {
-  storage: LiquidityPoolData;
+  poolStorage: LiquidityPoolData;
   block: Block;
+  perpetuals: Perpetual[];
+  ammPerpLogic: AMMPerpLogic;
+
   constructor(storage: LiquidityPoolData) {
-    this.storage = storage;
+    this.poolStorage = storage;
+    this.ammPerpLogic = new AMMPerpLogic();
+  }
+
+  setLiqPoolEmergencyState() {
+    for (const perpetual of this.perpetuals) {
+      perpetual.setEmergencyState();
+    }
+  }
+
+  getShareTokenAmountForPricing(): number {
+    throw new Error("Method not implemented.");
   }
 
   withdrawFromBrokerPool(_fAmount: number) {
     // pre-condition: require(_fAmount > 0, "withdraw amount must>0");
-    const fBrokerPoolCC = this.storage.fBrokerFundCashCC;
+    const fBrokerPoolCC = this.poolStorage.fBrokerFundCashCC;
     if (fBrokerPoolCC == 0) {
       return 0;
     }
     const withdraw = _fAmount > fBrokerPoolCC ? fBrokerPoolCC : _fAmount;
-    this.storage.fBrokerFundCashCC = fBrokerPoolCC - withdraw;
+    this.poolStorage.fBrokerFundCashCC = fBrokerPoolCC - withdraw;
     return withdraw;
   }
 
   decreaseDefaultFundCash(_fAmount: number) {
     require(_fAmount >= 0, "dec neg pool cash");
-    this.storage.fDefaultFundCashCC =
-      this.storage.fDefaultFundCashCC - _fAmount;
-    require(this.storage.fDefaultFundCashCC >= 0, "DF cash cannot be <0");
+    this.poolStorage.fDefaultFundCashCC =
+      this.poolStorage.fDefaultFundCashCC - _fAmount;
+    require(this.poolStorage.fDefaultFundCashCC >= 0, "DF cash cannot be <0");
   }
 
   decreasePoolCash(_fAmount: number) {
     require(_fAmount >= 0, "dec neg pool cash");
-    this.storage.fPnLparticipantsCashCC =
-      this.storage.fPnLparticipantsCashCC - _fAmount;
+    this.poolStorage.fPnLparticipantsCashCC =
+      this.poolStorage.fPnLparticipantsCashCC - _fAmount;
   }
 
   transferFromVaultToUser(executorAddr: any, fReferralRebateCC: number) {
