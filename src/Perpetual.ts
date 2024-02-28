@@ -1,15 +1,18 @@
+import { AMMPerpLogic } from "./AMMPerpLogic";
 import { LiquidityPool } from "./LiquidityPool";
 import {
   CollateralCurrency,
-  IPerpetualOrder,
+  PerpetualOrder,
   LiquidityPoolData,
   MarginAccount,
   PerpetualParams,
   PerpetualState,
   AMMVariables,
   MarketVariables,
+  Block,
 } from "./types";
 import {
+  ABDKToTbps,
   ema,
   hasOpenedPosition,
   hasTheSameSign,
@@ -41,7 +44,7 @@ export class Perpetual extends LiquidityPool {
   fCurrentTraderExposureEMA: number;
   currentMarkPremiumRate: { time: number; fPrice: number };
   fTargetAMMFundSize: number;
-  fUnitAccumulatedFunding: number;
+  fUnitAccumulatedFunding: number = 0;
   fCurrentAMMExposureEMA: [number, number];
 
   fOpenInterest: number;
@@ -58,10 +61,23 @@ export class Perpetual extends LiquidityPool {
   MIN_NUM_LOTS_PER_POSITION: number;
   iLastTargetPoolSizeTime: number;
   fTargetDFSize: any;
+  iLastSettlementPriceUpdateTimestamp: number;
+  isMarketClosed: boolean;
 
-  constructor(poolData: LiquidityPoolData, params: PerpetualParams) {
-    super(poolData);
+  constructor(
+    block: Block,
+    ammPerpLogic: AMMPerpLogic,
+    poolData: LiquidityPoolData,
+    params: PerpetualParams
+  ) {
+    super(block, ammPerpLogic, poolData);
     this.params = params;
+    this.fCurrentTraderExposureEMA = params.fMinimalTraderExposureEMA;
+    this.fCurrentAMMExposureEMA = [
+      -params.fMinimalAMMExposureEMA,
+      params.fMinimalAMMExposureEMA,
+    ];
+    this.state = PerpetualState.INVALID;
   }
 
   /**
@@ -70,7 +86,7 @@ export class Perpetual extends LiquidityPool {
    * @param _isApprovedExecutor
    * @returns
    */
-  tradeViaOrderBook(_order: IPerpetualOrder, _isApprovedExecutor: boolean) {
+  tradeViaOrderBook(_order: PerpetualOrder, _isApprovedExecutor: boolean) {
     require(!this.paused, "paused");
     this.updateFundingAndPricesBefore(true);
 
@@ -130,7 +146,7 @@ export class Perpetual extends LiquidityPool {
    * @param _order
    * @returns
    */
-  checkTradePreCond(_order: IPerpetualOrder) {
+  checkTradePreCond(_order: PerpetualOrder) {
     if (this.state == PerpetualState.EMERGENCY) {
       // perpetual should be in NORMAL state
       // modifier might set the state to emergency, so in this case we return but do not
@@ -141,7 +157,7 @@ export class Perpetual extends LiquidityPool {
     return true;
   }
 
-  trade(_order: IPerpetualOrder) {
+  trade(_order: PerpetualOrder) {
     let isClose = false;
 
     let fPrice = 0;
@@ -336,7 +352,7 @@ export class Perpetual extends LiquidityPool {
     return Math.abs(pos * fConversionB2C * m);
   }
 
-  distributeFees(_order: IPerpetualOrder, _hasOpened: boolean): number {
+  distributeFees(_order: PerpetualOrder, _hasOpened: boolean): number {
     return this._distributeFees(
       _order.traderAddr,
       _order.executorAddr,
@@ -715,7 +731,7 @@ export class Perpetual extends LiquidityPool {
   doOpeningTradeActions(
     _fTraderPos: number,
     _fPrice: number,
-    _order: IPerpetualOrder
+    _order: PerpetualOrder
   ) {
     // pre condition: !isClose, i.e., the trade is (further) opening the position
     this.updateKStar();
@@ -803,7 +819,7 @@ export class Perpetual extends LiquidityPool {
   doMarginCollateralActions(
     _fTraderPos: number,
     _fPrice: number,
-    _order: IPerpetualOrder
+    _order: PerpetualOrder
   ) {
     // determine and set fee for treasury
     let totalFeeRateTbps: number = this.setExchangeFee(_order);
@@ -859,7 +875,7 @@ export class Perpetual extends LiquidityPool {
     }
   }
 
-  setBrokerFeeAndUpdateVolumeEMA(_order: IPerpetualOrder): number {
+  setBrokerFeeAndUpdateVolumeEMA(_order: PerpetualOrder): number {
     //   if (_order.brokerAddr == address(0x0) || _order.brokerSignature.length == 0) {
     //     // broker did not sign
     //     marginAccounts[_order.iPerpetualId][_order.traderAddr].brokerFeeTbps = 0;
@@ -887,7 +903,7 @@ export class Perpetual extends LiquidityPool {
     return 0;
   }
 
-  setExchangeFee(_order: IPerpetualOrder): number {
+  setExchangeFee(_order: PerpetualOrder): number {
     const fee = this.determineExchangeFee(_order);
     if (!this.marginAccounts.has(_order.traderAddr)) {
       this.marginAccounts.set(_order.traderAddr, {
@@ -904,7 +920,7 @@ export class Perpetual extends LiquidityPool {
     return fee;
   }
 
-  determineExchangeFee(_order: IPerpetualOrder): number {
+  determineExchangeFee(_order: PerpetualOrder): number {
     //   if (_order.brokerAddr == address(0x0) || _order.brokerSignature.length == 0) {
     //     // no broker or no signature
     //     return _determineExchangeFee(0, _order.traderAddr, address(0x0));
@@ -1002,7 +1018,7 @@ export class Perpetual extends LiquidityPool {
 
   depositMarginForOpeningTrade(
     _fDepositRequired: number,
-    _order: IPerpetualOrder
+    _order: PerpetualOrder
   ) {
     if (_order.traderAddr != this.address) {
       this.activeAccounts.add(_order.traderAddr);
@@ -1027,7 +1043,7 @@ export class Perpetual extends LiquidityPool {
     return true;
   }
 
-  preTrade(_order: IPerpetualOrder): [number, number] {
+  preTrade(_order: PerpetualOrder): [number, number] {
     // round the trade amount to the next lot size
     let _fAmount = roundToLot(_order.fAmount, this.params.fLotSizeBC);
     require(Math.abs(_fAmount) > 0, "trade amount too small");
@@ -1116,7 +1132,7 @@ export class Perpetual extends LiquidityPool {
    *
    * @param _order
    */
-  rebateExecutor(_order: IPerpetualOrder) {
+  rebateExecutor(_order: PerpetualOrder) {
     this.transferFromUserToVault(
       _order.traderAddr,
       this.params.fReferralRebateCC
@@ -1167,16 +1183,72 @@ export class Perpetual extends LiquidityPool {
       this.fUnitAccumulatedFunding + fInterestPaymentLong;
   }
 
-  checkOracleStatus(revertIfClosed: boolean) {
-    throw new Error("Method not implemented.");
+  checkOracleStatus(_revertIfClosed: boolean) {
+    let fPrice = this.getOraclePrice([
+      this.params.S2BaseCCY,
+      this.params.S2QuoteCCY,
+    ]);
+    let isMarketClosed = false;
+    if (fPrice > 0) {
+      let fCurrSpread = this.calculateVolatilitySpread();
+      if (fPrice != this.fSettlementS2PriceData) {
+        // the price was updated. Potentially increase spread
+        // we can only confidently increase the spread if settlementprice data
+        // was updated recently, otherwise the price jump can be a result of
+        // us not observing the price change
+        if (
+          this.iLastSettlementPriceUpdateTimestamp + 6 >
+          this.block.timestamp
+        ) {
+          let fJump = Math.abs(fPrice / this.fSettlementS2PriceData - 1);
+          if (fJump > fCurrSpread + fCurrSpread) {
+            // we cap the spread increase at 8bps
+            this.jumpSpreadTbps = fJump > 0.0008 ? 80 : ABDKToTbps(fJump);
+            this.iLastPriceJumpTimestamp = this.block.timestamp;
+          }
+        }
+        this.fSettlementS2PriceData = fPrice;
+      }
+      this.iLastSettlementPriceUpdateTimestamp = this.block.timestamp;
+    } else {
+      isMarketClosed = true;
+    }
+    if (this.params.eCollateralCurrency === CollateralCurrency.QUANTO) {
+      fPrice = this.getOraclePrice([
+        this.params.S3BaseCCY,
+        this.params.S3QuoteCCY,
+      ]);
+      if (fPrice > 0) {
+        this.fSettlementS3PriceData = fPrice;
+      } else {
+        isMarketClosed = true;
+      }
+    }
+    require(!_revertIfClosed || !isMarketClosed, "market is closed");
   }
 
   getSafeOraclePriceS3(): number {
-    throw new Error("Method not implemented.");
+    let fPrice = this.getOraclePrice([
+      this.params.S3BaseCCY,
+      this.params.S3QuoteCCY,
+    ]);
+    if (fPrice == 0) {
+      return this.fSettlementS3PriceData;
+    } else {
+      return fPrice;
+    }
   }
 
   getSafeOraclePriceS2(): number {
-    throw new Error("Method not implemented.");
+    let fPrice = this.getOraclePrice([
+      this.params.S2BaseCCY,
+      this.params.S2QuoteCCY,
+    ]);
+    if (fPrice == 0) {
+      return this.fSettlementS2PriceData;
+    } else {
+      return fPrice;
+    }
   }
 
   /**
@@ -1882,5 +1954,11 @@ export class Perpetual extends LiquidityPool {
       require(ccy == CollateralCurrency.QUOTE, "unknown state");
       return fPx2;
     }
+  }
+
+  setNormalState() {
+    require(this.state == PerpetualState.INITIALIZING ||
+      this.state == PerpetualState.INVALID, "state should be INIT/INVALID");
+    this.state = PerpetualState.NORMAL;
   }
 }

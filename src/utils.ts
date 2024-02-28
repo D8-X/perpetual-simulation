@@ -114,3 +114,7 @@ export function validatePrice(
   require(_fPrice > 0, "price must be positive");
   return _isLong ? _fPrice <= _fPriceLimit : _fPrice >= _fPriceLimit;
 }
+
+export function loadData() {
+  return;
+}
