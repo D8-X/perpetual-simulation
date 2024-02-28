@@ -1,7 +1,53 @@
-import { AMMVariables, MarketVariables } from "./types";
+import { AMMVariables, CollateralCurrency, MarketVariables } from "./types";
 import { ABDKToTbps, emaWithTimeJumps, tbpsToABDK, require } from "./utils";
 
 export class AMMPerpLogic {
+  calculateDefaultFundSize(
+    _fK2AMM: [number, number],
+    _fk2Trader: number,
+    _fCoverN: number,
+    fStressRet2: [number, number],
+    fStressRet3: [number, number],
+    fIndexPrices: [number, number],
+    _eCCY: CollateralCurrency
+  ): any {
+    require(_fK2AMM[0] < 0, "_fK2AMM[0] must be negative");
+    require(_fK2AMM[1] > 0, "_fK2AMM[1] must be positive");
+    require(_fk2Trader > 0, "_fk2Trader must be positive");
+
+    let fEll = [0, 0];
+    // downward stress scenario
+    fEll[0] =
+      (Math.abs(_fK2AMM[0]) + _fk2Trader * _fCoverN) *
+      (1 - Math.exp(fStressRet2[0]));
+    // upward stress scenario
+    fEll[1] =
+      (Math.abs(_fK2AMM[1]) + _fk2Trader * _fCoverN) *
+      (Math.exp(fStressRet2[1]) - 1);
+    let fIstar = 0;
+    if (_eCCY == CollateralCurrency.BASE) {
+      fIstar = fEll[0] / Math.exp(fStressRet2[0]);
+      let fI2 = fEll[1] / Math.exp(fStressRet2[1]);
+      if (fI2 > fIstar) {
+        fIstar = fI2;
+      }
+    } else if (_eCCY == CollateralCurrency.QUANTO) {
+      fIstar = fEll[0] / Math.abs(fStressRet3[0]);
+      let fI2 = fEll[1] / Math.abs(fStressRet3[1]);
+      if (fI2 > fIstar) {
+        fIstar = fI2;
+      }
+      fIstar = fIstar * (fIndexPrices[0] / fIndexPrices[1]);
+    } else {
+      if (fEll[0] > fEll[1]) {
+        fIstar = fEll[0] * fIndexPrices[0];
+      } else {
+        fIstar = fEll[1] * fIndexPrices[0];
+      }
+    }
+    return fIstar;
+  }
+
   volatilitySpread(
     _jumpTbps: number,
     _minimalSpreadTbps: number,

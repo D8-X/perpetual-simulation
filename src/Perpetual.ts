@@ -56,6 +56,8 @@ export class Perpetual extends LiquidityPool {
   iLastPriceJumpTimestamp: number;
   jumpSpreadTbps: any;
   MIN_NUM_LOTS_PER_POSITION: number;
+  iLastTargetPoolSizeTime: number;
+  fTargetDFSize: any;
 
   constructor(poolData: LiquidityPoolData, params: PerpetualParams) {
     super(poolData);
@@ -198,8 +200,51 @@ export class Perpetual extends LiquidityPool {
       // remove trader from active accounts and withdraw deposits
       this.withdrawDepositFromMarginAccount(_order.traderAddr);
     }
-    // _getUpdateLogic().updateDefaultFundTargetSize(perpetual.id);
+    this.updateDefaultFundTargetSize();
     return true;
+  }
+
+  updateDefaultFundTargetSize() {
+    const liquidityPool = this.poolStorage;
+    if (
+      this.block.timestamp - this.iLastTargetPoolSizeTime >
+        liquidityPool.iTargetPoolSizeUpdateTime &&
+      this.state == PerpetualState.NORMAL
+    ) {
+      // update of Default Fund target size for given perpetual
+      let fDelta = -this.fTargetDFSize;
+      this.fTargetDFSize = this.getDefaultFundTargetSize();
+      fDelta = fDelta + this.fTargetDFSize;
+      // update the total value in the liquidity pool
+      liquidityPool.fTargetDFSize = liquidityPool.fTargetDFSize + fDelta;
+      // reset update time
+      this.iLastTargetPoolSizeTime = this.block.timestamp;
+    }
+  }
+
+  getDefaultFundTargetSize(): number {
+    let fIndexPrices: [number, number] = [0, 0];
+    (fIndexPrices[0] = this.fSettlementS2PriceData),
+      (fIndexPrices[1] =
+        this.params.eCollateralCurrency == CollateralCurrency.QUANTO
+          ? this.fSettlementS3PriceData
+          : 0);
+    const len = this.activeAccounts.size;
+    let fCoverN = this.params.fDFCoverNRate * len;
+    // floor for number of traders:
+    if (fCoverN < 5) {
+      fCoverN = 5; // =5
+    }
+
+    return this.ammPerpLogic.calculateDefaultFundSize(
+      this.fCurrentAMMExposureEMA,
+      this.fCurrentTraderExposureEMA * this.params.fInitialMarginRate,
+      fCoverN,
+      this.params.fStressReturnS2,
+      this.params.fStressReturnS3,
+      fIndexPrices,
+      this.params.eCollateralCurrency
+    );
   }
 
   /**

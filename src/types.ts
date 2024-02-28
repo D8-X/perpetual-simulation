@@ -12,6 +12,7 @@ export enum PerpetualState {
 }
 
 export interface PerpetualParams {
+  fDFCoverNRate: number;
   minimalSpreadTbps: number;
   incentiveSpreadTbps: number;
   fMaximalTradeSizeBumpUp: number;
@@ -30,6 +31,8 @@ export interface PerpetualParams {
   fDFLambda: [number, number];
   eCollateralCurrency: CollateralCurrency;
   fFundingRateClamp: number;
+  fStressReturnS2: [number, number];
+  fStressReturnS3: [number, number];
   // this is simulation-specific (not on-chain)
   fTradingFee: number;
   fBrokerFee: number;
