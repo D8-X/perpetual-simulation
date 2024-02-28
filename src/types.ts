@@ -22,6 +22,7 @@ export interface PerpetualParams {
   fAMMTargetDD: number;
   fDFLambda: [number, number];
   eCollateralCurrency: CollateralCurrency;
+  fFundingRateClamp: number;
 }
 
 export interface LiquidityPoolData {

@@ -11,6 +11,23 @@ export function ema(_fEMA: number, _fCurrentObs: number, _fLambda: number) {
   return _fEMA * _fLambda + (1 - _fLambda) * _fCurrentObs;
 }
 
+export function validateStopPrice(
+  _isLong: boolean,
+  _fMarkPrice: number,
+  _fTriggerPrice: number
+) {
+  {
+    if (_fTriggerPrice == 0) {
+      return;
+    }
+    // if stop order, mark price must meet trigger price condition
+    const isTriggerSatisfied = _isLong
+      ? _fMarkPrice >= _fTriggerPrice
+      : _fMarkPrice <= _fTriggerPrice;
+    require(isTriggerSatisfied, "trigger cond not met");
+  }
+}
+
 export interface AMMVariables {
   // all variables are
   // signed 64.64-bit fixed point number
@@ -31,6 +48,30 @@ export interface MarketVariables {
 }
 
 export class AMMPerpLogic {
+  getTargetCollateralM3(
+    fK: number,
+    fLockedIn: number,
+    mv: MarketVariables,
+    fAMMTargetDD: any
+  ): number {
+    throw new Error("Method not implemented.");
+  }
+  getTargetCollateralM1(
+    fK: number,
+    fLockedIn: number,
+    mv: MarketVariables,
+    fAMMTargetDD: any
+  ): number {
+    throw new Error("Method not implemented.");
+  }
+  getTargetCollateralM2(
+    fK: number,
+    fLockedIn: number,
+    mv: MarketVariables,
+    fAMMTargetDD: any
+  ): number {
+    throw new Error("Method not implemented.");
+  }
   calculateRiskNeutralPD(
     _ammVars: AMMVariables,
     _mktVars: MarketVariables,
@@ -107,6 +148,33 @@ export class AMMPerpLogic {
       q = this.normalCDF(dd);
     }
     return [q, dd];
+  }
+  calculateRiskNeutralDDNoQuanto(
+    fSigma2: number,
+    fDenominator: number,
+    fThresh: number
+  ): number {
+    throw new Error("Method not implemented.");
+  }
+  calculateRiskNeutralDDWithQuanto(
+    _ammVars: AMMVariables,
+    _mktVars: MarketVariables,
+    fDenominator: number,
+    fThresh: number
+  ): number {
+    throw new Error("Method not implemented.");
+  }
+
+  normalCDF(x: number) {
+    const t = 1 / (1 + 0.2315419 * Math.abs(x));
+    const d = 0.3989423 * Math.exp((-x * x) / 2);
+    let prob =
+      d *
+      t *
+      (0.3193815 +
+        t * (-0.3565638 + t * (1.781478 + t * (-1.821256 + t * 1.330274))));
+    if (x > 0) prob = 1 - prob;
+    return prob;
   }
 
   calculatePerpetualPrice(

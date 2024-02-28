@@ -35,12 +35,19 @@ export class Perpetual extends LiquidityPool {
   iLastFundingTime: any;
   fCurrentFundingRate: any;
   FUNDING_INTERVAL_SEC: any;
+  BASE_RATE: number;
 
   constructor(poolData: LiquidityPoolData, params: PerpetualParams) {
     super(poolData);
     this.params = params;
   }
 
+  /**
+   *
+   * @param _order
+   * @param _isApprovedExecutor
+   * @returns
+   */
   tradeViaOrderBook(_order: IPerpetualOrder, _isApprovedExecutor: boolean) {
     require(!this.paused, "paused");
     this.updateFundingAndPricesBefore(true);
@@ -82,6 +89,11 @@ export class Perpetual extends LiquidityPool {
     return true;
   }
 
+  /**
+   *
+   * @param _bUseOracle
+   * @returns
+   */
   getPerpetualMarkPrice(_bUseOracle: boolean) {
     const fPremiumRate = this.currentMarkPremiumRate.fPrice;
     const markPrice =
@@ -91,6 +103,11 @@ export class Perpetual extends LiquidityPool {
     return markPrice;
   }
 
+  /**
+   *
+   * @param _order
+   * @returns
+   */
   checkTradePreCond(_order: IPerpetualOrder) {
     if (this.state == PerpetualState.EMERGENCY) {
       // perpetual should be in NORMAL state
@@ -106,6 +123,10 @@ export class Perpetual extends LiquidityPool {
     return true;
   }
 
+  /**
+   *
+   * @param _order
+   */
   rebateExecutor(_order: IPerpetualOrder) {
     this.transferFromUserToVault(
       _order.traderAddr,
@@ -117,11 +138,19 @@ export class Perpetual extends LiquidityPool {
     );
   }
 
+  /**
+   *
+   * @param revertIfClosed
+   */
   updateFundingAndPricesBefore(revertIfClosed: boolean) {
     this.checkOracleStatus(revertIfClosed);
     this.accumulateFundingInPerp();
   }
 
+  /**
+   *
+   * @returns
+   */
   accumulateFundingInPerp() {
     let iTimeElapsed = this.iLastFundingTime;
     if (
@@ -153,10 +182,69 @@ export class Perpetual extends LiquidityPool {
     throw new Error("Method not implemented.");
   }
 
+  /**
+   *
+   */
   updateFundingAndPricesAfter() {
-    return;
+    this.updateFundingRatesInPerp();
   }
 
+  /**
+   *
+   * @returns
+   */
+  updateFundingRatesInPerp() {
+    if (
+      this.iLastFundingTime >= this.block.timestamp ||
+      this.state != PerpetualState.NORMAL
+    ) {
+      // invalid time or not running
+      return;
+    }
+    this.updateFundingRate();
+    //update iLastFundingTime (we need it in _accumulateFundingInPerp and _updateFundingRatesInPerp)
+    this.iLastFundingTime = this.block.timestamp;
+  }
+
+  /**
+   *
+   */
+  updateFundingRate() {
+    let fFundingRate = 0;
+    let fBase = 0;
+    {
+      const fFundingRateClamp = this.params.fFundingRateClamp;
+      let fPremiumRate = this.getMarkPremiumRateEMA();
+      // clamp the rate
+      const K2 = -this.marginAccounts.get(this.address)!.fPositionBC;
+      if (fPremiumRate > fFundingRateClamp) {
+        // r > 0 applies only if also K2 > 0
+        fPremiumRate = K2 > 0 ? fPremiumRate : fFundingRateClamp;
+        fFundingRate = fPremiumRate.sub(fFundingRateClamp);
+      } else if (fPremiumRate < -fFundingRateClamp) {
+        // r < 0 applies only if also K2 < 0
+        fPremiumRate = K2 < 0 ? fPremiumRate : -fFundingRateClamp;
+        fFundingRate = fPremiumRate.add(fFundingRateClamp);
+      }
+      fBase = K2 >= 0 ? this.BASE_RATE : -this.BASE_RATE;
+    }
+
+    fFundingRate = fFundingRate + fBase;
+    this.fCurrentFundingRate = fFundingRate;
+  }
+
+  /**
+   *
+   * @returns
+   */
+  getMarkPremiumRateEMA() {
+    return this.currentMarkPremiumRate.fPrice;
+  }
+
+  /**
+   *
+   * @returns
+   */
   rebalance() {
     if (this.state !== PerpetualState.NORMAL) {
       return;
@@ -167,6 +255,9 @@ export class Perpetual extends LiquidityPool {
     this.updateKStar();
   }
 
+  /**
+   *
+   */
   equalizeAMMMargin() {
     const [fMarginBalance, fInitialBalance] = this.getRebalanceMargin();
     if (fMarginBalance > fInitialBalance) {
@@ -184,6 +275,9 @@ export class Perpetual extends LiquidityPool {
     }
   }
 
+  /**
+   *
+   */
   updateMarkPrice() {
     const fCurrentPremiumRate = this.calcInsurancePremium();
     this.updatePremiumMarkPrice(fCurrentPremiumRate);
@@ -194,6 +288,10 @@ export class Perpetual extends LiquidityPool {
     );
   }
 
+  /**
+   *
+   * @returns
+   */
   calcInsurancePremium() {
     const [ammState, marketState] = this.prepareAMMAndMarketData(false);
     let px_premium = this.ammPerpLogic.calculatePerpetualPrice(
@@ -207,6 +305,12 @@ export class Perpetual extends LiquidityPool {
       (px_premium - marketState.fIndexPriceS2) / marketState.fIndexPriceS2;
     return px_premium;
   }
+
+  /**
+   *
+   * @param _bUseOracle
+   * @returns
+   */
   prepareAMMAndMarketData(
     _bUseOracle: boolean
   ): [AMMVariables, MarketVariables] {
@@ -250,13 +354,19 @@ export class Perpetual extends LiquidityPool {
     }
     return [ammState, marketState];
   }
+
   getSafeOraclePriceS3(): number {
     throw new Error("Method not implemented.");
   }
+
   getSafeOraclePriceS2(): number {
     throw new Error("Method not implemented.");
   }
 
+  /**
+   *
+   * @param _fCurrentPremiumRate
+   */
   updatePremiumMarkPrice(_fCurrentPremiumRate: number) {
     const iCurrentTimeSec = this.block.timestamp;
     if (
@@ -272,6 +382,9 @@ export class Perpetual extends LiquidityPool {
     }
   }
 
+  /**
+   *
+   */
   updateKStar() {
     const ccy = this.params.eCollateralCurrency;
     const AMMMarginAcc = this.marginAccounts.get(this.address)!;
@@ -291,6 +404,10 @@ export class Perpetual extends LiquidityPool {
       this.fkStar = (nominator / denom / fB2C) * fM - K2;
     }
   }
+
+  /**
+   *
+   */
   updateAMMTargetFundSize() {
     const liquidityPool = this.poolStorage;
     const fOldTarget = this.fTargetAMMFundSize;
@@ -301,6 +418,12 @@ export class Perpetual extends LiquidityPool {
     liquidityPool.fTargetAMMFundSize =
       liquidityPool.fTargetAMMFundSize - fOldTarget + this.fTargetAMMFundSize;
   }
+
+  /**
+   *
+   * @param _ccy
+   * @returns
+   */
   getUpdatedTargetAMMFundSize(_ccy: CollateralCurrency): number {
     // loop through perpetuals of this pool and update the
     // pool size
@@ -371,12 +494,21 @@ export class Perpetual extends LiquidityPool {
     return fMStar;
   }
 
+  /**
+   *
+   * @returns
+   */
   getRebalanceMargin() {
     const fInitialMargin = this.getInitialMargin(this.address);
     const fMarginBalance = this.getMarginBalance(this.address);
     return [fMarginBalance, fInitialMargin];
   }
 
+  /**
+   *
+   * @param _traderAddr
+   * @returns
+   */
   getMarginBalance(_traderAddr: string) {
     const atMark =
       _traderAddr != this.address || this.state != PerpetualState.NORMAL;
@@ -399,6 +531,11 @@ export class Perpetual extends LiquidityPool {
     return fMargin;
   }
 
+  /**
+   *
+   * @param _traderAddr
+   * @returns
+   */
   getAvailableCash(_traderAddr: string): number {
     const account = this.marginAccounts.get(_traderAddr);
     const fCashCC = account?.fCashCC ?? 0;
@@ -409,6 +546,11 @@ export class Perpetual extends LiquidityPool {
     return fCashCC - (account?.fPositionBC ?? 0) * fFundingUnitPayment;
   }
 
+  /**
+   *
+   * @param _bUseOracle
+   * @returns
+   */
   getCollateralToQuoteConversionMultiplier(_bUseOracle: boolean): number {
     const ccy = this.params.eCollateralCurrency;
     if (ccy == CollateralCurrency.BASE) {
@@ -425,6 +567,11 @@ export class Perpetual extends LiquidityPool {
     }
   }
 
+  /**
+   *
+   * @param _traderAddr
+   * @returns
+   */
   getInitialMargin(_traderAddr: string) {
     const isMark = _traderAddr != this.address;
     // base to collateral currency conversion
@@ -437,6 +584,11 @@ export class Perpetual extends LiquidityPool {
     return Math.abs(pos * fConversionB2C * m);
   }
 
+  /**
+   *
+   * @param fAmount
+   * @returns
+   */
   transferFromAMMMarginToPool(fAmount: number) {
     if (fAmount == 0) {
       return;
@@ -456,12 +608,24 @@ export class Perpetual extends LiquidityPool {
     pool.fDefaultFundCashCC = pool.fDefaultFundCashCC.add(fDFAmount);
   }
 
+  /**
+   *
+   * @param _liquidityPool
+   * @param _fAmount
+   */
   increasePoolCash(_liquidityPool: LiquidityPoolData, _fAmount: number) {
     require(_fAmount >= 0, "inc neg pool cash");
     _liquidityPool.fPnLparticipantsCashCC =
       _liquidityPool.fPnLparticipantsCashCC + _fAmount;
   }
 
+  /**
+   *
+   * @param _liquidityPool
+   * @param _fAmount
+   * @param _isWithdrawn
+   * @returns
+   */
   splitAmount(
     _liquidityPool: LiquidityPoolData,
     _fAmount: number,
@@ -508,6 +672,11 @@ export class Perpetual extends LiquidityPool {
     return [fAmountPnLparticipants, fAmountDF];
   }
 
+  /**
+   *
+   * @param _liquidityPool
+   * @returns
+   */
   getCollateralTokenAmountForPricing(_liquidityPool: LiquidityPoolData) {
     if (this.poolStorage.totalSupplyShareToken == 0) {
       return 0;
@@ -519,6 +688,12 @@ export class Perpetual extends LiquidityPool {
     return shareProportion * pnlPartCash;
   }
 
+  /**
+   *
+   * @param _traderAddr
+   * @param _fDeltaCash
+   * @returns
+   */
   updateTraderMargin(_traderAddr: string, _fDeltaCash: number) {
     if (_fDeltaCash == 0) {
       return;
@@ -536,6 +711,12 @@ export class Perpetual extends LiquidityPool {
     }
   }
 
+  /**
+   *
+   * @param _fAmount
+   * @param _fMarginBalance
+   * @returns
+   */
   transferFromPoolToAMMMargin(_fAmount: number, _fMarginBalance: number) {
     // transfer from pool to AMM: amount >= 0
     if (_fAmount == 0) {
@@ -568,6 +749,14 @@ export class Perpetual extends LiquidityPool {
     return fFeasibleMargin;
   }
 
+  /**
+   *
+   * @param _fAmount
+   * @param _fMarginBalance
+   * @param _fPnLPartFunds
+   * @param _pool
+   * @returns
+   */
   getFeasibleTransferFromPoolToAMMMargin(
     _fAmount: number,
     _fMarginBalance: number,
@@ -620,10 +809,17 @@ export class Perpetual extends LiquidityPool {
     return [fDFAmount, fLPAmount];
   }
 
+  /**
+   *
+   */
   setEmergencyState() {
     this.state = PerpetualState.EMERGENCY;
   }
 
+  /**
+   *
+   * @returns
+   */
   getPerpetualAllocatedFunds() {
     if (this.fTargetAMMFundSize <= 0) {
       return 0;
@@ -643,6 +839,12 @@ export class Perpetual extends LiquidityPool {
     return fFunds;
   }
 
+  /**
+   *
+   * @param _isMarkPriceRequest
+   * @param _bUseOracle
+   * @returns
+   */
   getBaseToCollateralConversionMultiplier(
     _isMarkPriceRequest: boolean,
     _bUseOracle: boolean
