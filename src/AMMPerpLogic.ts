@@ -62,30 +62,69 @@ export class AMMPerpLogic {
   }
 
   getTargetCollateralM3(
-    fK: number,
-    fLockedIn: number,
-    mv: MarketVariables,
-    fAMMTargetDD: any
+    _fK2: number,
+    _fL1: number,
+    _mktVars: MarketVariables,
+    _fTargetDD: any
   ): number {
-    throw new Error("Method not implemented.");
+    // we solve the quadratic equation A x^2 + Bx + C = 0
+    // B = 2 * [X + Y * target_dd^2 * (exp(rho*sigma2*sigma3) - 1) ]
+    // C = X^2  - Y^2 * target_dd^2 * (exp(sigma2^2) - 1)
+    // where:
+    // X = L1 / S3 - Y and Y = K2 * S2 / S3
+    // we re-use L1 for X and K2 for Y to save memory since they don't enter the equations otherwise
+    _fK2 = (_fK2 * _mktVars.fIndexPriceS2) / _mktVars.fIndexPriceS3; // Y
+    _fL1 = _fL1 / _mktVars.fIndexPriceS3 - _fK2; // X
+    // we only need the square of the target DD
+    _fTargetDD = _fTargetDD * _fTargetDD;
+    // and we only need B/2
+    let fHalfB =
+      _fL1 +
+      _fK2 *
+        (_fTargetDD *
+          (_mktVars.fRho23 * (_mktVars.fSigma2 * _mktVars.fSigma3)));
+    let fC =
+      _fL1 * _fL1 -
+      _fK2 * _fK2 * _fTargetDD * (_mktVars.fSigma2 * _mktVars.fSigma2);
+    // A = 1 - (exp(sigma3^2) - 1) * target_dd^2
+    let fA = 1 - _mktVars.fSigma3 * _mktVars.fSigma3 * _fTargetDD;
+    // we re-use C to store the discriminant: D = (B/2)^2 - A * C
+    fC = fHalfB * fHalfB - fA * fC;
+    if (fC < 0) {
+      // no solutions -> AMM is in profit, probability is smaller than target regardless of capital
+      return 0;
+    }
+    // we want the larger of (-B/2 + sqrt((B/2)^2-A*C)) / A and (-B/2 - sqrt((B/2)^2-A*C)) / A
+    // so it depends on the sign of A, or, equivalently, the sign of sqrt(...)/A
+    fC = Math.sqrt(fC) / fA;
+    fHalfB = fHalfB / fA;
+    return fC > 0 ? fC - fHalfB : -fC - fHalfB;
   }
 
   getTargetCollateralM1(
-    fK: number,
-    fLockedIn: number,
-    mv: MarketVariables,
-    fAMMTargetDD: any
+    _fK2: number,
+    _fL1: number,
+    _mktVars: MarketVariables,
+    _fTargetDD: any
   ): number {
-    throw new Error("Method not implemented.");
+    let fMu2 = -0.5 * _mktVars.fSigma2 * _mktVars.fSigma2;
+    let ddScaled =
+      _fK2 < 0 ? _mktVars.fSigma2 * _fTargetDD : -_mktVars.fSigma2 * _fTargetDD;
+    let A1 = Math.exp(fMu2 + ddScaled);
+    return _fK2 * _mktVars.fIndexPriceS2 * A1 - _fL1;
   }
 
   getTargetCollateralM2(
-    fK: number,
-    fLockedIn: number,
-    mv: MarketVariables,
-    fAMMTargetDD: any
+    _fK2: number,
+    _fL1: number,
+    _mktVars: MarketVariables,
+    _fTargetDD: any
   ): number {
-    throw new Error("Method not implemented.");
+    let fMu2 = -0.5 * _mktVars.fSigma2 * _mktVars.fSigma2;
+    let ddScaled =
+      _fL1 < 0 ? _mktVars.fSigma2 * _fTargetDD : -_mktVars.fSigma2 * _fTargetDD;
+    let A1 = Math.exp(fMu2 + ddScaled) * _mktVars.fIndexPriceS2;
+    return _fK2 - _fL1 / A1;
   }
 
   calculateRiskNeutralPD(
