@@ -236,6 +236,31 @@ class Perpetual:
             # adverse position: rescale according to DF depletion level
             df_ratio =  np.min((1, self.my_amm.get_default_fund_gap_to_target_ratio()))
             pos_size *= df_ratio
+            # new; ensure default won't happen
+            #  (C * s3 - (s2 e^r  K2 -L1)) / (s2 |e^r-1|) >  |k|
+            if is_long:
+                s2 = self.get_index_price() * np.exp(self.params['fStressReturnS2'][1])
+                s3 = 1
+                if self.collateral_currency is CollateralCurrency.BASE:
+                    s3 = s2
+                elif self.collateral_currency is CollateralCurrency.QUANTO:
+                    s3 = self.get_collateral_to_quote_conversion() * np.exp(self.params['fStressReturnS3'][0])
+                cash = self.amm_trader.cash_cc + self.get_LP_cash_for_perp()
+                max_pos = (cash * s3  + (self.amm_trader.position_bc * s2 - self.amm_trader.locked_in_qc)) / s2 / (np.exp(self.params['fStressReturnS2'][1])-1)
+                # print(f"max_pos = {pos_size}, max_max_pos = {max_pos}")
+                pos_size = max_pos if pos_size > max_pos else pos_size
+            else:
+                s2 = self.get_index_price() * np.exp(self.params['fStressReturnS2'][0])
+                s3 = 1
+                if self.collateral_currency is CollateralCurrency.BASE:
+                    s3 = s2
+                elif self.collateral_currency is CollateralCurrency.QUANTO:
+                    s3 = self.get_collateral_to_quote_conversion() * np.exp(self.params['fStressReturnS3'][0])
+                cash = self.amm_trader.cash_cc + self.get_LP_cash_for_perp()
+                max_pos = (cash * s3 + (self.amm_trader.position_bc * s2 - self.amm_trader.locked_in_qc)) / s2 / (1 - np.exp(self.params['fStressReturnS2'][0]))
+                # print(f"max_pos = {pos_size}, max_max_pos = {max_pos}")
+                pos_size = max_pos if pos_size < max_pos else pos_size
+
 
         return pos_size * (1 if is_long else -1)
 
@@ -255,7 +280,7 @@ class Perpetual:
                 (max_signed_trade_amount > 0 and k_star >= max_signed_trade_amount) or 
                 (max_signed_trade_amount < 0 and k_star <= max_signed_trade_amount))
         ):
-            max_signed_trade_amount = 2*k_star   
+            max_signed_trade_amount = k_star   
         res = self.my_amm.shrink_to_lot(max_signed_trade_amount, self.params['fLotSizeBC'])
         res = np.sign(res) * np.min(
             (np.abs(res), self.get_absolute_max_trade_size()))
