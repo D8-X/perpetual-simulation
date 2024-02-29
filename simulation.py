@@ -53,7 +53,7 @@ NUM_TRADERS = {
     'AVAXUSD': 0,
     'SOLUSD': 0,
     'OKBUSD': 0,
-    'PEPEUSD': 10
+    'PEPEUSD': 20
 }
 
 # new traders join randomly - up to how many each time? 
@@ -162,7 +162,7 @@ SIM_PARAMS['log_every'] = 1_000
 POSITIONS_WATCH = dict()
 
 # Parallelize run?
-RUN_PARALLEL = True
+RUN_PARALLEL = False
 
 def main():
     all_runs_t0 = datetime.now()    
@@ -170,9 +170,9 @@ def main():
     # seed for cash samples, random agent trading order, random agent preferences
     seeds = [
         # 123,
-        345,
+        # 345,
         # 567,
-        # 42, 
+        42, 
         # 31415,
         # 66260,
     ]
@@ -190,15 +190,15 @@ def main():
     # given that a trader is about to open a position, with what probability will it be a long one?
     long_probs = [
         # 0.30,
-        0.50,
-        0.70,
+        # 0.50,
+        0.80,
         # 0.30,
         # 0.95,
     ]
 
     # total cash brought in by each LP (randomized if not 'committed')
     cash_per_lp = [
-       len(SYMBOLS) * 210_000,
+       len(SYMBOLS) * 200_000,
     ]
 
     # how much liquidity does the protocol have at launch? in dollars
@@ -218,7 +218,7 @@ def main():
     # distribution is fat tailed
     usds_per_trader = [
         # 1_000,
-        1_500,
+        # 1_500,
         # 1_200,
         2_000,
         
@@ -232,11 +232,11 @@ def main():
     num_trades_per_day = [
         # 0.25,
         # 0.5,
-        0.75,
+        # 0.75,
         # 1,
         # 1.25,
-        1.5,
-        # 2,
+        # 1.5,
+        2,
         # 5,
     ]
     
@@ -370,7 +370,7 @@ def simulate(sim_input):
     total_arb_traders = dict()
     total_num_traders = dict()
     for symbol in SYMBOLS:
-        total_noise_traders[symbol] = int(np.ceil(NUM_TRADERS[symbol] * 0.90))
+        total_noise_traders[symbol] = int(np.ceil(NUM_TRADERS[symbol] * 0.50))
         total_momentum_traders[symbol] = NUM_TRADERS[symbol] - total_noise_traders[symbol]
         total_arb_traders[symbol] = BOTS_PER_PERP[symbol]
         total_num_traders[symbol] = total_noise_traders[symbol] + total_momentum_traders[symbol] + total_arb_traders[symbol]
